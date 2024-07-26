@@ -17,6 +17,7 @@ rule read =
   | int {INT (int_of_string (Lexing.lexeme lexbuf))}
   | float    { FLOAT (float_of_string (Lexing.lexeme lexbuf)) }
   | "." {DOT}
+  | "fun" {FN}
   | "defun" {DEFUN}
   | "def" {DEF}
   | "'" {QUOTE}

@@ -14,6 +14,7 @@ open Ast
 %token EOF
 %token QUOTE "'"
 %token DOT "."
+%token FN
 
 %start <expr option> prog
 %%
@@ -30,6 +31,7 @@ expr:
   | a = ATOM {Atom a}
   | i = INT {Int i}
   | f = FLOAT {Float f}
+  | LPAREN; FN; LPAREN; args = list(ATOM); RPAREN; e = expr; RPAREN; {Fn (args, e)}
   | LPAREN; DEF; name = ATOM; e = expr; RPAREN {Def (name, e)}
   | LPAREN; DEFUN; name = ATOM; LPAREN; args = list(ATOM); RPAREN; e = expr; RPAREN {Defun (name, args, e)}
   | LPAREN; es = list(expr); RPAREN {List es}

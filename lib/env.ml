@@ -30,7 +30,7 @@ let rec show_value value =
   | Float f -> Float.to_string f
   | Atom a -> a
   | Function _ -> "<func>"
-  | String s -> String.concat [ "\""; s; "\"" ]
+  | String s -> s
   | List vals -> String.concat ~sep:" " @@ List.map vals ~f:show_value
   | Thunk _ -> "<thunk>"
 
@@ -133,6 +133,11 @@ let bin_lte a b =
   | Atom "false" -> bool_to_atom @@ equal_value a b
   | other -> failwith (show_value other)
 
+let bin_mod a b =
+  match (a, b) with
+  | Int a, Int b -> Int (a mod b)
+  | _ -> raise (TypeError (a, b))
+
 exception ArgError of value * value list
 
 let str vals =
@@ -201,6 +206,11 @@ let rec if_ vals =
   | [ Atom "true"; Thunk succ; _ ] -> succ ()
   | [ Atom "false"; _; Thunk els ] -> els ()
   | _ -> raise (ArgError (Function (`Internal if_), vals))
+
+let rec mod_ vals =
+  match vals with
+  | [ a; b ] -> bin_mod a b
+  | _ -> raise (ArgError (Function (`Internal mod_), vals))
 
 exception InvalidArg of string
 exception MatchError of string
@@ -283,6 +293,7 @@ let populate () =
       (">=", Function (`Internal gte));
       ("<=", Function (`Internal lte));
       ("=", Function (`Internal eq));
+      ("mod", Function (`Internal mod_));
       ("if", Function (`Internal if_));
       ("str", Function (`Internal str));
       ("io-puts", Function (`Internal io_puts));

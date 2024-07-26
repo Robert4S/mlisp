@@ -11,6 +11,7 @@ bug-reports: "https://github.com/Robert4S/mlisp/issues"
 depends: [
   "ocaml"
   "dune" {>= "3.16"}
+  "ppx_expect"
   "odoc" {with-doc}
 ]
 build: [

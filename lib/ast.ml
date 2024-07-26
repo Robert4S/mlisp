@@ -9,4 +9,5 @@ type expr =
   | Defun of string * string list * expr
   | Def of string * expr
   | Quoted of expr
+  | Fn of string list * expr
 [@@deriving show { with_path = false }, eq, ord]

@@ -19,7 +19,7 @@
  (name mlisp)
  (synopsis "Lisp interpreter")
  (description "Simple lisp grammar, and reader written in ocampl")
- (depends ocaml dune)
+ (depends ocaml dune ppx_expect)
  (tags
   ("lisp" "parser" "interpreter")))
 

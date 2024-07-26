@@ -6,6 +6,7 @@ let handle_defun args body = Function (`Userdefined { args; body })
 
 let rec eval (env : env) (value : expr) =
   match value with
+  | Fn (args, body) -> handle_defun args body
   | Defun (name, args, body) ->
       let func = handle_defun args body in
       Env.update env name ~f:(fun _ -> func);

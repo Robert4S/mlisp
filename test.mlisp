@@ -4,8 +4,17 @@
     (* n (fact (- n 1)))))
 
 (defun map (ls f)
+  (if (nil? ls)
+    nil
+    (cons
+      (f (hd ls))
+      (map (tail ls) f))))
+
+(defun filter (ls pred)
   (cond
     (nil? ls) nil
-    :else (cons (f (hd ls))
-	  (map (tail ls) f))))
-
+    (pred (hd ls))
+    (cons
+      (hd ls)
+      (filter (tail ls) pred))
+    :else (filter (tail ls) pred)))

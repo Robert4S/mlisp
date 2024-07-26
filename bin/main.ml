@@ -1,5 +1,6 @@
 open Mlisp
 open Core
+open! Cases
 module F = Fmt
 
 let count_char s c =
