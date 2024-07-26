@@ -18,3 +18,7 @@
       (hd ls)
       (filter (tail ls) pred))
     :else (filter (tail ls) pred)))
+
+(def numbers '(1 2 3 4 5 6))
+
+(io-puts (filter numbers (fun (a) (= 0 (mod a 2)))))

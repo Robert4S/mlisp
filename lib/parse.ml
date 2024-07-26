@@ -8,16 +8,18 @@ let parse (s : string) : expr =
   | None -> Ast.Eof
   | Some o -> o
 
-let evaluate_program env (s : string) =
+let eval_put oc env s =
   let parsed = parse s in
   match parsed with
   | List exprs ->
       let evaluated = List.map exprs ~f:(Eval.eval env) |> List.rev in
-      print_endline @@ Env.show_value @@ List.hd_exn evaluated
+      Printf.fprintf oc "%s\n" @@ Env.show_value @@ List.hd_exn evaluated
   | _ -> ()
 
-let get_text filename () =
+let evaluate_program env (s : string) = eval_put Out_channel.stdout env s
+
+let get_text oc filename () =
   let text = In_channel.read_all filename in
   let env = Env.populate () in
-  evaluate_program env text;
+  eval_put oc env text;
   env

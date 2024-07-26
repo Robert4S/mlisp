@@ -31,7 +31,7 @@ let () =
   if Array.length args = 3 then (
     if String.(args.(1) = "-r") then (
       let filename = args.(2) in
-      let env = Parse.get_text filename () in
+      let env = Parse.get_text Out_channel.stdout filename () in
       let name = String.drop_suffix filename 6 in
       print_string "mlisp ";
       print_string name;
@@ -40,7 +40,7 @@ let () =
       repl name env ())
     else if String.(args.(1) = "-c") then
       let filename = args.(2) in
-      let _ = Parse.get_text filename () in
+      let _ = Parse.get_text (Out_channel.create "/dev/null") filename () in
       ())
   else (
     print_string "mlisp ";
