@@ -15,8 +15,8 @@ rule read =
   parse
   | white {read lexbuf}
   | int {INT (int_of_string (Lexing.lexeme lexbuf))}
-  | float    { FLOAT (float_of_string (Lexing.lexeme lexbuf)) }
   | "." {DOT}
+  | float    { FLOAT (float_of_string (Lexing.lexeme lexbuf)) }
   | "fun" {FN}
   | "defun" {DEFUN}
   | "def" {DEF}

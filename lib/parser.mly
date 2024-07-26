@@ -25,7 +25,7 @@ prog:
 ;
 
 expr:
-  | car = expr; DOT; cdr = expr {ConsCell (car, cdr)}
+  | LPAREN; car = expr; DOT; cdr = expr; RPAREN {ConsCell (car, cdr)}
   | QUOTE; e = expr {Quoted e}
   | s = STRING {String s}
   | a = ATOM {Atom a}

@@ -4,21 +4,47 @@
     (* n (fact (- n 1)))))
 
 (defun map (ls f)
-  (if (nil? ls)
-    nil
-    (cons
-      (f (hd ls))
-      (map (tail ls) f))))
+  (if (nil? ls) nil
+    (cons (f (hd ls))
+          (map (tail ls) f))))
 
 (defun filter (ls pred)
   (cond
     (nil? ls) nil
     (pred (hd ls))
-    (cons
-      (hd ls)
-      (filter (tail ls) pred))
+      (cons (hd ls) (filter (tail ls) pred))
     :else (filter (tail ls) pred)))
 
-(def numbers '(1 2 3 4 5 6))
+(defun rev-inner (ls acc) 
+  (cond
+    (nil? ls) acc
+    :else (rev-inner (tail ls) (cons (hd ls) acc))))
 
-(io-puts (filter numbers (fun (a) (= 0 (mod a 2)))))
+(defun rev (ls) (rev-inner ls nil))
+
+(defun add-5 (a) (+ a 5))
+(defun even? (a) (= 0 (mod a 2)))
+
+(def numbersc (1 . (2 . (3 . (4 . (5 . (6 . (7 . ( 8 . (9 . (10 . nil)))))))))))
+(def numbersl '(1 2 3 4 5 6 7 8 9 10))
+
+(defun call (a) (a))
+
+(defun lazy-range (start stop)
+  (if (= start stop) nil
+    (cons start (fun () (lazy-range (+ start 1) stop)))))
+
+(defun take-inner (n lst acc)
+  (cond
+    (= 0 n) acc
+    (nil? lst) acc
+    (fun? lst) (take-inner n (lst) acc)
+    (fun? (hd lst)) (take-inner
+                       (- n 1)
+                       (tail lst)
+                       (cons (call (hd lst)) acc))
+    :else (take-inner (- n 1) (tail lst) (cons (hd lst) acc))))
+
+(defun take (n lst) (rev (take-inner n lst nil)))
+
+(def myrange (lazy-range 0 5))

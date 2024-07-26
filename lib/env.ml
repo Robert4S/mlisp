@@ -1,4 +1,5 @@
 open Core
+module F = Fmt
 
 type 'a gen_func = 'a list -> 'a
 
@@ -7,22 +8,48 @@ let equal_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = false
 let pp_gen_func _c f (_gf : 'a gen_func) = Format.fprintf f "function"
 
 type 'a delayed = unit -> 'a
+type 'a cons_cell = 'a * 'a [@@deriving show, eq, ord]
 
 let compare_delayed _c _a _b = 0
 let equal_delayed _c _a_ _b = false
 let pp_delayed _c f _gf = Format.fprintf f "function"
 
 type func = { args : string list; body : Ast.expr } [@@deriving show, eq, ord]
+type 'a gen_hashtable = (string, 'a) Hashtbl.t list
+
+let compare_gen_hashtable _c _a _b = 0
+let equal_gen_hashtable _c _a _b = false
+let pp_gen_hashtable _c f _gf = Format.fprintf f "TABLE"
 
 type value =
   | Int of int
   | Float of float
   | Atom of string
-  | Function of [ `Userdefined of func | `Internal of value gen_func ]
+  | Function of
+      [ `Userdefined of func * value gen_hashtable | `Internal of value gen_func ]
   | String of string
   | List of value list
   | Thunk of value delayed
+  | ConsCell of value cons_cell
 [@@deriving eq, ord]
+
+let list_to_cons_cell (ls : value list) =
+  let rec aux lst acc =
+    match (lst, acc) with
+    | [], ConsCell (a, b) -> ConsCell (ConsCell (a, b), Atom "nil")
+    | [], other -> ConsCell (other, Atom "nil")
+    | x :: xs, ConsCell (a, b) -> aux xs (ConsCell (x, ConsCell (a, b)))
+    | x :: xs, other -> aux xs (ConsCell (x, other))
+  in
+  match ls with
+  | x :: xs -> aux xs x
+  | [] -> Atom "nil"
+
+let rec is_valid_list (value : value) =
+  match value with
+  | Atom "nil" -> true
+  | ConsCell (_, rest) -> is_valid_list rest
+  | _ -> false
 
 let rec show_value value =
   match value with
@@ -33,6 +60,7 @@ let rec show_value value =
   | String s -> s
   | List vals -> String.concat ~sep:" " @@ List.map vals ~f:show_value
   | Thunk _ -> "<thunk>"
+  | ConsCell (car, cdr) -> Format.sprintf "%s . %s" (show_value car) (show_value cdr)
 
 let fake_func = Function (`Internal (fun _ -> failwith "not a real function"))
 let bool_to_atom a = if a then Atom "true" else Atom "false"
@@ -49,9 +77,19 @@ let push e =
 
 exception Unbound of string
 
+let show (e : env) =
+  let open List.Let_syntax in
+  let keys = e >>= Hashtbl.keys in
+  let data = e >>= Hashtbl.data >>| show_value in
+  String.concat ~sep:" "
+  @@ List.map ~f:(fun (a, b) -> sprintf "(%s : %s)" a b)
+  @@ List.zip_exn keys data
+
 let rec find e name =
   match e with
-  | [] -> raise (Unbound name)
+  | [] ->
+      F.pr "%s\n" @@ show e;
+      raise (Unbound name)
   | x :: xs -> (
       let found = Hashtbl.find x name in
       match found with
@@ -248,6 +286,7 @@ let hd_ (vals : value list) =
   match vals with
   | [ List (x :: _) ] -> x
   | [ List [] ] -> Atom "nil"
+  | [ ConsCell (car, _cdr) ] -> car
   | [ String s ] -> String (Char.to_string @@ String.get s 0)
   | _ ->
       raise (InvalidArg "cannot take the head of something that is not a collection")
@@ -256,6 +295,7 @@ let tail vals =
   match vals with
   | [ List (_ :: xs) ] -> List xs
   | [ List [] ] -> Atom "nil"
+  | [ ConsCell (_car, cdr) ] -> cdr
   | _ -> raise (InvalidArg "tail can only take the tail of a single list")
 
 let nil (vals : value list) =
@@ -271,11 +311,34 @@ let list (vals : value list) =
   | [ _ ] -> Atom "false"
   | _ -> raise (InvalidArg "list? expects 1 argument")
 
+let cell (vals : value list) =
+  match vals with
+  | [ ConsCell _ ] -> Atom "true"
+  | [ _ ] -> Atom "false"
+  | _ -> raise (InvalidArg "list? expects 1 argument")
+
 let cons (vals : value list) =
   match vals with
   | [ x; List ls ] -> List (x :: ls)
   | [ x; Atom "nil" ] -> List [ x ]
+  | [ x; y ] -> ConsCell (x, y)
   | _ -> raise (InvalidArg "cons expects a value and a list")
+
+let car (vals : value list) =
+  match vals with
+  | [ ConsCell (car, _cdr) ] -> car
+  | _ -> raise (InvalidArg "cannot get the car off of a non cons list")
+
+let cdr (vals : value list) =
+  match vals with
+  | [ ConsCell (_car, cdr) ] -> cdr
+  | _ -> raise (InvalidArg "cannot get the cdr off of a non cons list")
+
+let fun_ (vals : value list) =
+  match vals with
+  | [ Function _ ] -> Atom "true"
+  | [ _ ] -> Atom "false"
+  | _ -> raise (InvalidArg "fun? expects one argument")
 
 let populate () =
   let items =
@@ -300,9 +363,13 @@ let populate () =
       ("cond", Function (`Internal cond));
       ("tail", Function (`Internal tail));
       ("cons", Function (`Internal cons));
+      ("car", Function (`Internal car));
+      ("cdr", Function (`Internal cdr));
       ("hd", Function (`Internal hd_));
       ("nil?", Function (`Internal nil));
       ("list?", Function (`Internal list));
+      ("fun?", Function (`Internal fun_));
+      ("cell?", Function (`Internal cell));
     ]
   in
   let tbl =

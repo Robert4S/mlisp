@@ -9,19 +9,29 @@ let count_char s c =
   List.fold chars ~init:0 ~f:count
 
 let repl name env () =
+  let preview () =
+    print_string "mlisp ";
+    print_string name;
+    print_string " > "
+  in
   let rec aux buf =
     Out_channel.(flush stdout);
-    let buf = String.append buf In_channel.(input_line_exn stdin) in
-    let opens = count_char buf '(' in
-    let closes = count_char buf ')' in
-    if closes >= opens then (
-      print_string "=> ";
-      Parse.evaluate_program env buf;
-      print_string "mlisp ";
-      print_string name;
-      print_string " > ";
-      aux buf)
-    else aux buf
+    let newbuf = String.append buf In_channel.(input_line_exn stdin) in
+    let opens = count_char newbuf '(' in
+    let closes = count_char newbuf ')' in
+    try
+      if closes >= opens then (
+        print_string "=> ";
+        Parse.evaluate_program env newbuf;
+        preview ();
+        aux "")
+      else aux newbuf
+    with
+    | e ->
+        print_endline "Error: ";
+        print_endline @@ Exn.to_string e;
+        preview ();
+        aux buf
   in
   let _ = aux "" in
   ()

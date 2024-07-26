@@ -2,13 +2,14 @@ open Core
 open Env
 open Ast
 
-let handle_defun args body = Function (`Userdefined { args; body })
+let handle_defun args body (env : env) =
+  Function (`Userdefined ({ args; body }, env))
 
-let rec eval (env : env) (value : expr) =
+let rec eval (env : env) (value : expr) : value =
   match value with
-  | Fn (args, body) -> handle_defun args body
+  | Fn (args, body) -> handle_defun args body env
   | Defun (name, args, body) ->
-      let func = handle_defun args body in
+      let func = handle_defun args body env in
       Env.update env name ~f:(fun _ -> func);
       Env.Atom "nil"
   | List (Atom name :: args) ->
@@ -16,7 +17,7 @@ let rec eval (env : env) (value : expr) =
         let env = Env.push env in
 
         if not (List.length args = List.length f.args) then
-          raise (ArgError (Function (`Userdefined f), args));
+          raise (ArgError (Function (`Userdefined (f, env)), args));
 
         List.iter (List.zip_exn f.args args) ~f:(fun (name, value) ->
             Env.update env name ~f:(fun _ -> value));
@@ -38,9 +39,9 @@ let rec eval (env : env) (value : expr) =
             | _ ->
                 let args = List.map args ~f:(eval env) in
                 f args)
-        | Function (`Userdefined f) ->
+        | Function (`Userdefined (f, nenv)) ->
             let args = List.map args ~f:(eval env) in
-            handle_userdef_call env f args
+            handle_userdef_call nenv f args
         | _ ->
             let args = List.map args ~f:(eval env) in
             raise @@ TypeError (Env.List args, func)
@@ -57,6 +58,7 @@ let rec eval (env : env) (value : expr) =
   | Quoted (List exprs) -> Env.List (List.map exprs ~f:(eval env))
   | Atom name -> Env.find env name
   | String s -> Env.String s
+  | ConsCell (car, cdr) -> Env.ConsCell (eval env car, eval env cdr)
   | other ->
       print_endline @@ show_expr other;
       failwith "todo"
