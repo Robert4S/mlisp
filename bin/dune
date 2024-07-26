@@ -1,3 +1,10 @@
+(rule
+ (alias runscript)
+ (deps
+  (alias all))
+ (action
+  (system "cd ../../.. && ./makebin.sh")))
+
 (executable
  (public_name mlisp)
  (name main)
