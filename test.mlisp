@@ -32,7 +32,7 @@
 
 (defun lazy-range (start stop)
   (if (= start stop) nil
-    (cons start (fun () (lazy-range (+ start 1) stop)))))
+    (fun () (cons start (lazy-range (+ start 1) stop)))))
 
 (defun take-inner (n lst acc)
   (cond
@@ -47,4 +47,4 @@
 
 (defun take (n lst) (rev (take-inner n lst nil)))
 
-(def myrange (lazy-range 0 5))
+(def myrange (lazy-range 0 1000000000))

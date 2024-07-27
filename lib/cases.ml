@@ -1,6 +1,6 @@
 open! Core
 
-let env = Env.populate ()
+let env = Potentially.populate ()
 
 let%expect_test "simple expression" =
   let _ = Parse.evaluate_program env "5" in

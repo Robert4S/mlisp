@@ -20,6 +20,6 @@ let evaluate_program env (s : string) = eval_put Out_channel.stdout env s
 
 let get_text oc filename () =
   let text = In_channel.read_all filename in
-  let env = Env.populate () in
+  let env = Potentially.populate () in
   eval_put oc env text;
   env

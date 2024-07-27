@@ -8,6 +8,6 @@
 (executable
  (public_name mlisp)
  (name main)
- (libraries mlisp core fmt)
+ (libraries mlisp core fmt linenoise)
  (preprocess
   (pps ppx_let)))
