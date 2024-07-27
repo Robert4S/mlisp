@@ -81,8 +81,9 @@ let show (e : env) =
   let open List.Let_syntax in
   let keys = e >>= Hashtbl.keys in
   let data = e >>= Hashtbl.data >>| show_value in
-  String.concat ~sep:" "
+  String.concat ~sep:"\n"
   @@ List.map ~f:(fun (a, b) -> sprintf "(%s : %s)" a b)
+  @@ List.sort ~compare:(fun (key1, _) (key2, _) -> String.compare key1 key2)
   @@ List.zip_exn keys data
 
 let rec find e name =

@@ -12,7 +12,7 @@ let repl name env () =
   let open Option.Let_syntax in
   let rec aux prompt buf =
     let%bind inp = LNoise.linenoise prompt in
-    let%bind inp = (fun n -> if String.(n = "quit") then None else Some n) inp in
+    let%bind inp = (fun n -> if String.(n = ":q") then None else Some n) inp in
     LNoise.history_add inp |> ignore;
     LNoise.history_save ~filename:"history.txt" |> ignore;
     let newbuf = String.append buf inp in

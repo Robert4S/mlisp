@@ -21,6 +21,31 @@ let rec tail vals =
   | [ Function (`Userdefined (func, env)) ] -> tail @@ [ eval_function func env ]
   | _ -> raise (InvalidArg "tail can only take the tail of a single list")
 
+let quit _vals =
+  print_endline "Goodbye!";
+  exit 0
+
+let typeof vals : value =
+  let rec aux vals acc : string =
+    match vals with
+    | [] -> acc
+    | x :: xs ->
+        aux xs
+          (String.append
+             (match x with
+             | String _ -> "String"
+             | Atom a -> sprintf "Atom %s" a
+             | Function _ -> "Function"
+             | Int _ -> "Int"
+             | Float _ -> "Float"
+             | Thunk _ -> "Thunk"
+             | List _ -> "List"
+             | ConsCell (a, b) ->
+                 sprintf "ConsCell (%s) (%s)" (aux [ a ] "") (aux [ b ] ""))
+             acc)
+  in
+  String (aux vals "")
+
 let populate () =
   let items =
     Env.
@@ -48,6 +73,8 @@ let populate () =
         ("car", Function (`Internal car));
         ("cdr", Function (`Internal cdr));
         ("hd", Function (`Internal hd_));
+        ("quit", Function (`Internal quit));
+        ("type", Function (`Internal typeof));
         ("nil?", Function (`Internal nil));
         ("list?", Function (`Internal list));
         ("fun?", Function (`Internal fun_));

@@ -42,9 +42,25 @@
     (fun? (hd lst)) (take-inner
                        (- n 1)
                        (tail lst)
-                       (cons (call (hd lst)) acc))
+                       (cons ((hd lst)) acc))
     :else (take-inner (- n 1) (tail lst) (cons (hd lst) acc))))
 
 (defun take (n lst) (rev (take-inner n lst nil)))
+
+(defun not (b) (if b false true))
+
+(defun and (a b) (if a b (false)))
+
+(defun or (a b) (if a true b))
+
+(defun xor (a b) (if a (not b) b))
+
+(defun nand (a b) (not (and a b)))
+
+(defun add-twice-squared (a)
+  (let (squared (* a a))
+    (do
+      (io-puts squared)
+      (+ squared squared))))
 
 (def myrange (lazy-range 0 1000000000))
