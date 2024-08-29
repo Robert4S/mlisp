@@ -5,10 +5,12 @@ let env = Potentially.populate ()
 let%expect_test "simple expression" =
   let _ = Parse.evaluate_program env "5" in
   [%expect {| 5 |}]
+;;
 
 let%expect_test "basic arithemtic" =
   let _ = Parse.evaluate_program env "(* 2 (+ 5 5))" in
   [%expect {| 20 |}]
+;;
 
 let%expect_test "printing from lisp" =
   let _ = Parse.evaluate_program env "(io-puts 5)" in
@@ -16,13 +18,16 @@ let%expect_test "printing from lisp" =
     5
     nil
     |}]
+;;
 
 let%expect_test "functions" =
   let _ =
-    Parse.evaluate_program env
+    Parse.evaluate_program
+      env
       "(defun make-string (a b c) (str a b c)) (make-string \"Hello\" \" \" 5)"
   in
   [%expect {| Hello 5 |}]
+;;
 
 let%expect_test "recursion" =
   let program =
@@ -36,3 +41,26 @@ let%expect_test "recursion" =
   in
   let _ = Parse.evaluate_program env program in
   [%expect {| 120 |}]
+;;
+
+let%expect_test "variable captures" =
+  let program =
+    Parse.parse
+      "\n\
+      \    (defun fact (n)\n\
+      \    \n\
+      \     (if (= 0 n)\n\n\
+      \          1\n\n\
+      \          (* n (fact (- n 1)))))\n"
+  in
+  let bound_vars = Eval.bound_frame [ "n" ] program env in
+  Fmt.pr "%s" @@ Env.show bound_vars;
+  [%expect
+    {|
+    (* : <func>)
+    (- : <func>)
+    (= : <func>)
+    (fact : <func>)
+    (if : <func>)
+    |}]
+;;
