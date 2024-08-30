@@ -91,10 +91,13 @@ let rec pp_value (formatter : Format.formatter) value =
   | Thunk _ -> Format.fprintf formatter "<thunk>"
   | ConsCell (car, cdr) -> Format.fprintf formatter "%a . %a" pp_value car pp_value cdr
   | Map m ->
-    Format.fprintf formatter "{\n";
-    MlispMap.pairs m
-    |> List.iter ~f:(fun (key, value) ->
-      Format.fprintf formatter "%s : %a \n" key pp_value value);
+    Format.fprintf formatter "{";
+    let f (key, value) = Format.fprintf formatter ", %s = %a" key pp_value value in
+    (match MlispMap.pairs m with
+     | (key, value) :: xs ->
+       Format.fprintf formatter "%s = %a" key pp_value value;
+       List.iter xs ~f
+     | [] -> ());
     Format.fprintf formatter "}"
 ;;
 
