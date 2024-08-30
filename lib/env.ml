@@ -85,9 +85,9 @@ let rec pp_value (formatter : Format.formatter) value =
   | Float f -> Format.fprintf formatter "%f" f
   | Atom a -> Format.fprintf formatter "%s" a
   | Function _ -> Format.fprintf formatter "<func>"
-  | String s -> Format.fprintf formatter "%s" s
+  | String s -> Format.fprintf formatter "\"%s\"" s
   | List vals ->
-    List.iter vals ~f:(fun value -> Format.fprintf formatter "%a" pp_value value)
+    List.iter vals ~f:(fun value -> Format.fprintf formatter "%a " pp_value value)
   | Thunk _ -> Format.fprintf formatter "<thunk>"
   | ConsCell (car, cdr) -> Format.fprintf formatter "%a . %a" pp_value car pp_value cdr
   | Map m ->
@@ -95,7 +95,7 @@ let rec pp_value (formatter : Format.formatter) value =
     MlispMap.pairs m
     |> List.iter ~f:(fun (key, value) ->
       Format.fprintf formatter "%s : %a \n" key pp_value value);
-    Format.fprintf formatter "\n}"
+    Format.fprintf formatter "}"
 ;;
 
 let show_value value =
@@ -415,4 +415,20 @@ let fun_ (vals : value list) =
   | [ Function _ ] -> Atom "true"
   | [ _ ] -> Atom "false"
   | _ -> raise (InvalidArg "fun? expects one argument")
+;;
+
+let keys = function
+  | [ Map m ] -> List (List.map ~f:(fun (k, _) -> Atom k) @@ MlispMap.pairs m)
+  | _ -> assert false
+;;
+
+let values = function
+  | [ Map m ] -> List (List.map ~f:(fun (_, v) -> v) @@ MlispMap.pairs m)
+  | _ -> assert false
+;;
+
+let pairs = function
+  | [ Map m ] ->
+    List (List.map ~f:(fun (k, v) -> ConsCell (Atom k, v)) @@ MlispMap.pairs m)
+  | _ -> assert false
 ;;

@@ -15,6 +15,8 @@ open Ast
 %token QUOTE "'"
 %token DOT "."
 %token FN
+%token LBRAC "{"
+%token RBRAC "}"
 
 %start <expr option> prog
 %%
@@ -34,5 +36,6 @@ expr:
   | LPAREN; FN; LPAREN; args = list(ATOM); RPAREN; e = expr; RPAREN; {Fn (args, e)}
   | LPAREN; DEF; name = ATOM; e = expr; RPAREN {Def (name, e)}
   | LPAREN; DEFUN; name = ATOM; LPAREN; args = list(ATOM); RPAREN; e = expr; RPAREN {Defun (name, args, e)}
+  | LBRAC; es = list(expr); RBRAC {Map es}
   | LPAREN; es = list(expr); RPAREN {List es}
 ;

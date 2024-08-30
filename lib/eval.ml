@@ -82,6 +82,28 @@ let only_atoms exprs =
   aux exprs []
 ;;
 
+let handle_map_access eval env m field =
+  match eval env m with
+  | Env.Map m ->
+    (match MlispMap.get m field with
+     | Some v -> v
+     | None -> Atom "nil")
+  | _ -> raise @@ SyntaxError "temporary problem"
+;;
+
+let define_map eval env args =
+  let pairs =
+    List.chunks_of args ~length:2
+    |> List.map ~f:(function
+      | [ Atom a; b ] -> a, b
+      | _ -> assert false)
+    |> List.map ~f:(fun (key, value) -> key, eval env value)
+  in
+  Result.(MlispMap.create pairs >>= fun pairs -> Ok (Env.Map pairs))
+;;
+
+exception KeyError of string
+
 let rec eval (env : env) (value : expr) : value =
   match value with
   | Fn (args, body) -> handle_defun args body env
@@ -93,6 +115,10 @@ let rec eval (env : env) (value : expr) : value =
        Env.update captured name ~f:(fun _ -> func)
      | _ -> ());
     Env.Atom "nil"
+  | Map pairs ->
+    (match define_map eval env pairs with
+     | Ok res -> res
+     | Error key -> raise @@ KeyError key)
   | List (Atom "do" :: exprs) ->
     let rec evaldo exprs =
       match exprs with
@@ -112,6 +138,8 @@ let rec eval (env : env) (value : expr) : value =
       @@ List.filteri assignls ~f:(fun idx _ -> not (idx mod 2 = 0))
     in
     handle_userdef_call eval env Env.{ args = names; body } values
+  | List [ Atom field; m ] when Char.equal (String.to_array field).(0) ':' ->
+    handle_map_access eval env m field
   | List (Atom name :: args) ->
     (match eval env (Atom name) with
      | Function f -> handle_call eval env (Function f) name args
@@ -125,12 +153,13 @@ let rec eval (env : env) (value : expr) : value =
     Env.update env name ~f:(fun _ -> value);
     Env.Atom "nil"
   | Int i -> Env.Int i
+  | Float f -> Env.Float f
   | Quoted (List exprs) -> Env.List (List.map exprs ~f:(eval env))
   | Atom ":ls" -> String (Env.show env)
   | Atom name -> Env.find_exn env name
   | String s -> Env.String s
   | ConsCell (car, cdr) -> Env.ConsCell (eval env car, eval env cdr)
-  | other ->
-    print_endline @@ show_expr other;
-    failwith "todo"
+  | List [] -> Env.List []
+  | Quoted e -> Env.Thunk (fun _ -> eval env e)
+  | Eof -> Atom "nil"
 ;;

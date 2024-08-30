@@ -9,7 +9,7 @@ let exp = ['e' 'E'] ['-' '+']? digit+
 let float = digit* frac? exp?
 let newline = '\r' | '\n' | "\r\n"
 let white = [' ' '\t' ',' '\n' '\r']+
-let id = [^ '(' ')' '\t' '\n' '\r' ' ' ';' '"']*
+let id = [^ '(' ')' '\t' '\n' '\r' ' ' ';' '"' '{' '}']*
 
 rule read =
   parse
@@ -21,6 +21,8 @@ rule read =
   | "defun" {DEFUN}
   | "def" {DEF}
   | "'" {QUOTE}
+  | "{" {LBRAC}
+  | "}" {RBRAC}
   | id {ATOM (Lexing.lexeme lexbuf)}
   | "(" {LPAREN}
   | ")" {RPAREN}

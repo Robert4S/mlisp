@@ -7,6 +7,7 @@ type expr =
   | Float of float
   | ConsCell of expr * expr
   | List of expr list
+  | Map of expr list
   | String of string
   | Defun of string * string list * expr
   | Def of string * expr
