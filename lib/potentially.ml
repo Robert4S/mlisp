@@ -1,7 +1,7 @@
 open Core
 open Env
 
-let eval_function func env = Eval.handle_userdef_call Eval.eval env func []
+let eval_function func env = Eval.handle_userdef_call env func []
 
 let rec hd_ (vals : Env.value list) =
   match vals with
