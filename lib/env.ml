@@ -2,18 +2,14 @@ open Core
 open Ast
 module F = Fmt
 
+exception InvalidArg of string
+exception MatchError of string
+exception Unbound of string
+
 type 'a gen_func = 'a list -> 'a
-
-let compare_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = 0
-let equal_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = false
-let pp_gen_func _c f (_gf : 'a gen_func) = Format.fprintf f "function"
-
 type 'a delayed = unit -> 'a
+type 'a gen_hashtable = (string, 'a) Hashtbl.t list
 type 'a cons_cell = 'a * 'a [@@deriving show, eq, ord]
-
-let compare_delayed _c _a _b = 0
-let equal_delayed _c _a_ _b = false
-let pp_delayed _c f _gf = Format.fprintf f "function"
 
 type func =
   { args : string list
@@ -21,11 +17,15 @@ type func =
   }
 [@@deriving show, eq, ord]
 
-type 'a gen_hashtable = (string, 'a) Hashtbl.t list
-
-let compare_gen_hashtable _c _a _b = 0
-let equal_gen_hashtable _c _a _b = false
-let pp_gen_hashtable _c f _gf = Format.fprintf f "TABLE"
+let compare_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = 0
+and equal_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = false
+and pp_gen_func _c f (_gf : 'a gen_func) = Format.fprintf f "function"
+and compare_delayed _c _a _b = 0
+and equal_delayed _c _a_ _b = false
+and pp_delayed _c f _gf = Format.fprintf f "function"
+and compare_gen_hashtable _c _a _b = 0
+and equal_gen_hashtable _c _a _b = false
+and pp_gen_hashtable _c f _gf = Format.fprintf f "TABLE"
 
 module MlispMap : sig
   type 'a t [@@deriving eq, ord]
@@ -59,7 +59,12 @@ type value =
   | Map of value MlispMap.t
 [@@deriving eq, ord]
 
-let list_to_cons_cell (ls : value list) =
+exception TypeError of value * value
+exception ArgError of value * value list
+
+type env = (string, value) Hashtbl.t list
+
+let rec list_to_cons_cell (ls : value list) =
   let rec aux lst acc =
     match lst, acc with
     | [], ConsCell (a, b) -> ConsCell (ConsCell (a, b), Atom "nil")
@@ -70,16 +75,14 @@ let list_to_cons_cell (ls : value list) =
   match ls with
   | x :: xs -> aux xs x
   | [] -> Atom "nil"
-;;
 
-let rec is_valid_list (value : value) =
+and is_valid_list (value : value) =
   match value with
   | Atom "nil" -> true
   | ConsCell (_, rest) -> is_valid_list rest
   | _ -> false
-;;
 
-let rec pp_value (formatter : Format.formatter) value =
+and pp_value (formatter : Format.formatter) value =
   match value with
   | Int i -> Format.fprintf formatter "%d" i
   | Float f -> Format.fprintf formatter "%f" f
@@ -99,34 +102,26 @@ let rec pp_value (formatter : Format.formatter) value =
        List.iter xs ~f
      | [] -> ());
     Format.fprintf formatter "}"
-;;
 
-let show_value value =
+and show_value value =
   let buffer = Buffer.create 100 in
   let formatter = Format.formatter_of_buffer buffer in
   pp_value formatter value;
   Format.pp_print_flush formatter ();
   Buffer.contents buffer
-;;
 
-let fake_func = Function (`Internal (fun _ -> failwith "not a real function"))
-let bool_to_atom a = if a then Atom "true" else Atom "false"
+and fake_func = Function (`Internal (fun _ -> failwith "not a real function"))
+and bool_to_atom a = if a then Atom "true" else Atom "false"
 
-type env = (string, value) Hashtbl.t list
-
-let update e k ~f =
+and update e k ~f =
   let head = List.hd_exn e in
   Hashtbl.update head k ~f
-;;
 
-let push e =
+and push e =
   let symbol_table = Hashtbl.create ~growth_allowed:true ~size:20 (module String) in
   symbol_table :: e
-;;
 
-exception Unbound of string
-
-let show (e : env) =
+and show (e : env) =
   let open List.Let_syntax in
   let keys = e >>= Hashtbl.keys in
   let data = e >>= Hashtbl.data >>| show_value in
@@ -134,9 +129,8 @@ let show (e : env) =
   @@ List.map ~f:(fun (a, b) -> sprintf "(%s : %s)" a b)
   @@ List.sort ~compare:(fun (key1, _) (key2, _) -> String.compare key1 key2)
   @@ List.zip_exn keys data
-;;
 
-let rec find e name =
+and find e name =
   match e with
   | [] -> None
   | x :: xs ->
@@ -144,24 +138,21 @@ let rec find e name =
     (match found with
      | Some item -> Some item
      | None -> find xs name)
-;;
 
-let find_exn e name =
+and find_exn e name =
   match find e name with
   | None -> raise (Unbound name)
   | Some v -> v
-;;
 
-let rec mass_add env lst =
+and mass_add env lst =
   let head = List.hd_exn env in
   match lst with
   | [] -> ()
   | (key, data) :: xs ->
     Hashtbl.add_exn head ~key ~data;
     mass_add env xs
-;;
 
-let make pairs =
+and make pairs =
   let tbl =
     [ Hashtbl.create
         ~growth_allowed:true
@@ -171,11 +162,8 @@ let make pairs =
   in
   mass_add tbl pairs;
   tbl
-;;
 
-exception TypeError of value * value
-
-let bin_add a b =
+and bin_add a b =
   match a, b with
   | Int a, Int b -> Int (a + b)
   | Float a, Float b -> Float (a +. b)
@@ -183,9 +171,8 @@ let bin_add a b =
   | Float a, Int b -> Float (a +. float_of_int b)
   | String a, String b -> String (String.append a b)
   | _ -> raise (TypeError (a, b))
-;;
 
-let bin_minus a b =
+and bin_minus a b =
   match a, b with
   | Int a, Int b -> Int (a - b)
   | Float a, Float b -> Float (a -. b)
@@ -194,156 +181,130 @@ let bin_minus a b =
   | _ ->
     print_endline @@ show_value a;
     raise (TypeError (a, b))
-;;
 
-let bin_mul a b =
+and bin_mul a b =
   match a, b with
   | Int a, Int b -> Int (a * b)
   | Float a, Float b -> Float (a *. b)
   | Int a, Float b -> Float (float_of_int a *. b)
   | Float a, Int b -> Float (a *. float_of_int b)
   | _ -> raise (TypeError (a, b))
-;;
 
-let bin_div a b =
+and bin_div a b =
   match a, b with
   | Int a, Int b -> Int (a / b)
   | Float a, Float b -> Float (a /. b)
   | Int a, Float b -> Float (float_of_int a /. b)
   | Float a, Int b -> Float (a /. float_of_int b)
   | _ -> raise (TypeError (a, b))
-;;
 
-let bin_gt a b =
+and bin_gt a b =
   match a, b with
   | Int a, Int b -> bool_to_atom (a > b)
   | Float a, Float b -> bool_to_atom Float.(a > b)
   | Int a, Float b -> bool_to_atom Float.(float_of_int a > b)
   | Float a, Int b -> bool_to_atom Float.(a > float_of_int b)
   | _ -> raise (TypeError (a, b))
-;;
 
-let bin_lt a b =
+and bin_lt a b =
   match a, b with
   | Int a, Int b -> bool_to_atom (a < b)
   | Float a, Float b -> bool_to_atom Float.(a < b)
   | Int a, Float b -> bool_to_atom Float.(float_of_int a < b)
   | Float a, Int b -> bool_to_atom Float.(a < float_of_int b)
   | _ -> raise (TypeError (a, b))
-;;
 
-let bin_eq = equal_value
+and bin_eq = equal_value
 
-let bin_gte a b =
+and bin_gte a b =
   match bin_gt a b with
   | Atom "true" -> Atom "true"
   | Atom "false" -> bool_to_atom @@ equal_value a b
   | other -> failwith (show_value other)
-;;
 
-let bin_lte a b =
+and bin_lte a b =
   match bin_lt a b with
   | Atom "true" -> Atom "true"
   | Atom "false" -> bool_to_atom @@ equal_value a b
   | other -> failwith (show_value other)
-;;
 
-let bin_mod a b =
+and bin_mod a b =
   match a, b with
   | Int a, Int b -> Int (a mod b)
   | _ -> raise (TypeError (a, b))
-;;
 
-exception ArgError of value * value list
-
-let str vals =
+and str vals =
   String
     (List.fold vals ~init:"" ~f:(fun acc value -> String.append acc @@ show_value value))
-;;
 
-let io_puts value =
+and io_puts value =
   print_endline @@ show_value @@ List.hd_exn value;
   Atom "nil"
-;;
 
-let eq (vals : value list) : value =
+and eq (vals : value list) : value =
   bool_to_atom @@ Option.is_some @@ List.all_equal ~equal:equal_value vals
-;;
 
-let rec add (vals : value list) : value =
+and add (vals : value list) : value =
   let reduced = List.reduce vals ~f:bin_add in
   match reduced with
   | Some o -> o
   | None -> raise (ArgError (Function (`Internal add), vals))
-;;
 
-let rec sub (vals : value list) : value =
+and sub (vals : value list) : value =
   let reduced = List.reduce vals ~f:bin_minus in
   match reduced with
   | Some o -> o
   | None -> raise (ArgError (Function (`Internal sub), vals))
-;;
 
-let rec mul (vals : value list) : value =
+and mul (vals : value list) : value =
   let reduced = List.reduce vals ~f:bin_mul in
   match reduced with
   | Some o -> o
   | None -> raise (ArgError (Function (`Internal mul), vals))
-;;
 
-let rec div (vals : value list) : value =
+and div (vals : value list) : value =
   let reduced = List.reduce vals ~f:bin_div in
   match reduced with
   | Some o -> o
   | None -> raise (ArgError (Function (`Internal div), vals))
-;;
 
-let rec gt (vals : value list) : value =
+and gt (vals : value list) : value =
   let reduced = List.reduce vals ~f:bin_gt in
   match reduced with
   | Some o -> o
   | None -> raise (ArgError (Function (`Internal gt), vals))
-;;
 
-let rec lt (vals : value list) : value =
+and lt (vals : value list) : value =
   let reduced = List.reduce vals ~f:bin_lt in
   match reduced with
   | Some o -> o
   | None -> raise (ArgError (Function (`Internal lt), vals))
-;;
 
-let rec gte (vals : value list) : value =
+and gte (vals : value list) : value =
   let reduced = List.reduce vals ~f:bin_gte in
   match reduced with
   | Some o -> o
   | None -> raise (ArgError (Function (`Internal gte), vals))
-;;
 
-let rec lte (vals : value list) : value =
+and lte (vals : value list) : value =
   let reduced = List.reduce vals ~f:bin_lte in
   match reduced with
   | Some o -> o
   | None -> raise (ArgError (Function (`Internal lte), vals))
-;;
 
-let rec if_ vals =
+and if_ vals =
   match vals with
   | [ Thunk pred; Thunk succ; Thunk els ] -> if_ [ pred (); Thunk succ; Thunk els ]
   | [ Atom "true"; Thunk succ; _ ] -> succ ()
   | [ Atom "false"; _; Thunk els ] -> els ()
   | _ -> raise (ArgError (Function (`Internal if_), vals))
-;;
 
-let rec mod_ vals =
+and mod_ vals =
   match vals with
   | [ a; b ] -> bin_mod a b
   | _ -> raise (ArgError (Function (`Internal mod_), vals))
-;;
 
-exception InvalidArg of string
-exception MatchError of string
-
-let zip_pairs lst =
+and zip_pairs lst =
   let rec aux lst acc =
     match lst with
     | [] -> List.rev acc
@@ -351,9 +312,8 @@ let zip_pairs lst =
     | _ -> failwith "invalid"
   in
   aux lst []
-;;
 
-let cond (vals : value list) : value =
+and cond (vals : value list) : value =
   if not (List.length vals % 2 = 0) then raise (InvalidArg "argument count must be even");
   let pred_thens = zip_pairs vals in
   let res =
@@ -367,70 +327,62 @@ let cond (vals : value list) : value =
   | Some (_, Thunk v) -> v ()
   | None -> raise (MatchError "No cond clause matched. Perhaps a missing else clause?")
   | _ -> failwith "cond body should be a thunk"
-;;
 
-let print_arg_list vals = List.iter vals ~f:(fun arg -> print_endline @@ show_value arg)
+and print_arg_list vals = List.iter vals ~f:(fun arg -> print_endline @@ show_value arg)
 
-let nil (vals : value list) =
+and nil (vals : value list) =
   match vals with
   | [ List [] ] -> Atom "true"
   | [ Atom "nil" ] -> Atom "true"
   | [ _ ] -> Atom "false"
   | _ -> raise (InvalidArg "nil? expects 1 argument")
-;;
 
-let list (vals : value list) =
+and list (vals : value list) =
   match vals with
   | [ List _ ] -> Atom "true"
   | [ _ ] -> Atom "false"
   | _ -> raise (InvalidArg "list? expects 1 argument")
-;;
 
-let cell (vals : value list) =
+and cell (vals : value list) =
   match vals with
   | [ ConsCell _ ] -> Atom "true"
   | [ _ ] -> Atom "false"
   | _ -> raise (InvalidArg "list? expects 1 argument")
-;;
 
-let cons (vals : value list) =
+and cons (vals : value list) =
   match vals with
   | [ x; List ls ] -> List (x :: ls)
   | [ x; Atom "nil" ] -> List [ x ]
   | [ x; y ] -> ConsCell (x, y)
   | _ -> raise (InvalidArg "cons expects a value and a list")
-;;
 
-let car (vals : value list) =
+and car (vals : value list) =
   match vals with
   | [ ConsCell (car, _cdr) ] -> car
+  | [ List (x :: _) ] -> x
   | _ -> raise (InvalidArg "cannot get the car off of a non cons list")
-;;
 
-let cdr (vals : value list) =
+and cdr (vals : value list) =
   match vals with
   | [ ConsCell (_car, cdr) ] -> cdr
+  | [ List (_ :: xs) ] -> List xs
   | _ -> raise (InvalidArg "cannot get the cdr off of a non cons list")
-;;
 
-let fun_ (vals : value list) =
+and fun_ (vals : value list) =
   match vals with
   | [ Function _ ] -> Atom "true"
   | [ _ ] -> Atom "false"
   | _ -> raise (InvalidArg "fun? expects one argument")
-;;
 
-let keys = function
+and keys = function
   | [ Map m ] -> List (List.map ~f:(fun (k, _) -> Atom k) @@ MlispMap.pairs m)
   | _ -> assert false
-;;
 
-let values = function
+and values = function
   | [ Map m ] -> List (List.map ~f:(fun (_, v) -> v) @@ MlispMap.pairs m)
   | _ -> assert false
-;;
 
-let pairs = function
+and pairs = function
   | [ Map m ] ->
     List (List.map ~f:(fun (k, v) -> ConsCell (Atom k, v)) @@ MlispMap.pairs m)
   | _ -> assert false

@@ -2,25 +2,23 @@ open Core
 open Env
 open Ast
 
+exception SyntaxError of string
+exception KeyError of string
+
 let rec vars (body : expr) =
   match body with
   | Atom n -> [ n ]
   | List xs -> List.(xs >>= vars)
   | ConsCell (a, b) -> vars a @ vars b
-  | Fn (_, e) -> vars e
-  | Defun (_, _, e) -> vars e
-  | Def (_, e) -> vars e
-  | Quoted e -> vars e
+  | Fn (_, e) | Defun (_, _, e) | Def (_, e) | Quoted e -> vars e
   | _ -> []
-;;
 
-let bound_vars args body =
+and bound_vars args body =
   let vars = ExprSet.of_list @@ List.map ~f:(fun x -> Atom x) @@ vars body in
   let args = ExprSet.of_list @@ List.map ~f:(fun x -> Atom x) args in
   Set.to_list @@ Set.diff vars args
-;;
 
-let bound_frame args body env =
+and bound_frame args body env =
   let bound = bound_vars args body in
   let bound =
     List.(
@@ -36,23 +34,20 @@ let bound_frame args body env =
       | None -> None)
   in
   Env.make vals
-;;
 
-let handle_defun args body (env : env) =
+and handle_defun args body (env : env) =
   let captured = bound_frame args body env in
   Function (`Userdefined ({ args; body }, captured))
-;;
 
-let handle_userdef_call eval (env : env) (f : func) (args : value list) =
+and handle_userdef_call (env : env) (f : func) (args : value list) =
   let env = Env.push env in
   if not (List.length args = List.length f.args)
   then raise (ArgError (Function (`Userdefined (f, env)), args));
   List.iter (List.zip_exn f.args args) ~f:(fun (name, value) ->
     Env.update env name ~f:(fun _ -> value));
   eval env f.body
-;;
 
-let handle_call eval env func name args =
+and handle_call env func name args =
   match func with
   | Function (`Internal f) ->
     (match name with
@@ -62,17 +57,14 @@ let handle_call eval env func name args =
      | _ ->
        let args = List.map args ~f:(eval env) in
        f args)
-  | Function (`Userdefined (f, nenv)) ->
+  | Function (`Userdefined (f, new_env)) ->
     let args = List.map args ~f:(eval env) in
-    handle_userdef_call eval nenv f args
+    handle_userdef_call new_env f args
   | _ ->
     let args = List.map args ~f:(eval env) in
     raise @@ TypeError (Env.List args, func)
-;;
 
-exception SyntaxError of string
-
-let only_atoms exprs =
+and only_atoms exprs =
   let rec aux exprs acc =
     match exprs with
     | [] -> List.rev acc
@@ -80,18 +72,16 @@ let only_atoms exprs =
     | _ -> raise (SyntaxError "Destructuring is not yet supported")
   in
   aux exprs []
-;;
 
-let handle_map_access eval env m field =
+and handle_map_access env m field =
   match eval env m with
   | Env.Map m ->
     (match MlispMap.get m field with
      | Some v -> v
      | None -> Atom "nil")
   | _ -> raise @@ SyntaxError "temporary problem"
-;;
 
-let define_map eval env args =
+and define_map env args =
   let pairs =
     List.chunks_of args ~length:2
     |> List.map ~f:(function
@@ -100,11 +90,8 @@ let define_map eval env args =
     |> List.map ~f:(fun (key, value) -> key, eval env value)
   in
   Result.(MlispMap.create pairs >>= fun pairs -> Ok (Env.Map pairs))
-;;
 
-exception KeyError of string
-
-let rec eval (env : env) (value : expr) : value =
+and eval (env : env) (value : expr) : value =
   match value with
   | Fn (args, body) -> handle_defun args body env
   | Defun (name, args, body) ->
@@ -116,7 +103,7 @@ let rec eval (env : env) (value : expr) : value =
      | _ -> ());
     Env.Atom "nil"
   | Map pairs ->
-    (match define_map eval env pairs with
+    (match define_map env pairs with
      | Ok res -> res
      | Error key -> raise @@ KeyError key)
   | List (Atom "do" :: exprs) ->
@@ -137,16 +124,16 @@ let rec eval (env : env) (value : expr) : value =
       List.map ~f:(eval env)
       @@ List.filteri assignls ~f:(fun idx _ -> not (idx mod 2 = 0))
     in
-    handle_userdef_call eval env Env.{ args = names; body } values
+    handle_userdef_call env Env.{ args = names; body } values
   | List [ Atom field; m ] when Char.equal (String.to_array field).(0) ':' ->
-    handle_map_access eval env m field
+    handle_map_access env m field
   | List (Atom name :: args) ->
     (match eval env (Atom name) with
-     | Function f -> handle_call eval env (Function f) name args
+     | Function f -> handle_call env (Function f) name args
      | other -> raise @@ TypeError (other, fake_func))
   | List (func :: args) ->
     (match eval env func with
-     | Function f -> handle_call eval env (Function f) "" args
+     | Function f -> handle_call env (Function f) "" args
      | other -> raise @@ TypeError (other, fake_func))
   | Def (name, value) ->
     let value = eval env value in
