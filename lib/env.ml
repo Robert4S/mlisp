@@ -10,12 +10,7 @@ type 'a gen_func = 'a list -> 'a
 type 'a delayed = unit -> 'a
 type 'a gen_hashtable = (string, 'a) Hashtbl.t list
 type 'a cons_cell = 'a * 'a [@@deriving show, eq, ord]
-
-type func =
-  { args : string list
-  ; body : expr
-  }
-[@@deriving show, eq, ord]
+type func = { args : string list; body : expr } [@@deriving show, eq, ord]
 
 let compare_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = 0
 and equal_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = false
@@ -40,7 +35,6 @@ end = struct
     match String.Map.of_alist pairs with
     | `Ok m -> Ok m
     | `Duplicate_key s -> Error s
-  ;;
 
   let get = Map.find
   let pairs m = Map.to_alist m
@@ -66,7 +60,7 @@ type env = (string, value) Hashtbl.t list
 
 let rec list_to_cons_cell (ls : value list) =
   let rec aux lst acc =
-    match lst, acc with
+    match (lst, acc) with
     | [], ConsCell (a, b) -> ConsCell (ConsCell (a, b), Atom "nil")
     | [], other -> ConsCell (other, Atom "nil")
     | x :: xs, ConsCell (a, b) -> aux xs (ConsCell (x, ConsCell (a, b)))
@@ -90,18 +84,19 @@ and pp_value (formatter : Format.formatter) value =
   | Function _ -> Format.fprintf formatter "<func>"
   | String s -> Format.fprintf formatter "\"%s\"" s
   | List vals ->
-    List.iter vals ~f:(fun value -> Format.fprintf formatter "%a " pp_value value)
+      List.iter vals ~f:(fun value -> Format.fprintf formatter "%a " pp_value value)
   | Thunk _ -> Format.fprintf formatter "<thunk>"
-  | ConsCell (car, cdr) -> Format.fprintf formatter "%a . %a" pp_value car pp_value cdr
+  | ConsCell (car, cdr) ->
+      Format.fprintf formatter "%a . %a" pp_value car pp_value cdr
   | Map m ->
-    Format.fprintf formatter "{";
-    let f (key, value) = Format.fprintf formatter ", %s = %a" key pp_value value in
-    (match MlispMap.pairs m with
-     | (key, value) :: xs ->
-       Format.fprintf formatter "%s = %a" key pp_value value;
-       List.iter xs ~f
-     | [] -> ());
-    Format.fprintf formatter "}"
+      Format.fprintf formatter "{";
+      let f (key, value) = Format.fprintf formatter ", %s = %a" key pp_value value in
+      (match MlispMap.pairs m with
+      | (key, value) :: xs ->
+          Format.fprintf formatter "%s = %a" key pp_value value;
+          List.iter xs ~f
+      | [] -> ());
+      Format.fprintf formatter "}"
 
 and show_value value =
   let buffer = Buffer.create 100 in
@@ -133,11 +128,11 @@ and show (e : env) =
 and find e name =
   match e with
   | [] -> None
-  | x :: xs ->
-    let found = Hashtbl.find x name in
-    (match found with
-     | Some item -> Some item
-     | None -> find xs name)
+  | x :: xs -> (
+      let found = Hashtbl.find x name in
+      match found with
+      | Some item -> Some item
+      | None -> find xs name)
 
 and find_exn e name =
   match find e name with
@@ -149,22 +144,22 @@ and mass_add env lst =
   match lst with
   | [] -> ()
   | (key, data) :: xs ->
-    Hashtbl.add_exn head ~key ~data;
-    mass_add env xs
+      Hashtbl.add_exn head ~key ~data;
+      mass_add env xs
 
 and make pairs =
   let tbl =
-    [ Hashtbl.create
-        ~growth_allowed:true
+    [
+      Hashtbl.create ~growth_allowed:true
         ~size:(int_of_float (float_of_int (List.length pairs) *. 1.5))
-        (module String)
+        (module String);
     ]
   in
   mass_add tbl pairs;
   tbl
 
 and bin_add a b =
-  match a, b with
+  match (a, b) with
   | Int a, Int b -> Int (a + b)
   | Float a, Float b -> Float (a +. b)
   | Int a, Float b -> Float (b +. float_of_int a)
@@ -173,17 +168,17 @@ and bin_add a b =
   | _ -> raise (TypeError (a, b))
 
 and bin_minus a b =
-  match a, b with
+  match (a, b) with
   | Int a, Int b -> Int (a - b)
   | Float a, Float b -> Float (a -. b)
   | Int a, Float b -> Float (float_of_int a -. b)
   | Float a, Int b -> Float (a -. float_of_int b)
   | _ ->
-    print_endline @@ show_value a;
-    raise (TypeError (a, b))
+      print_endline @@ show_value a;
+      raise (TypeError (a, b))
 
 and bin_mul a b =
-  match a, b with
+  match (a, b) with
   | Int a, Int b -> Int (a * b)
   | Float a, Float b -> Float (a *. b)
   | Int a, Float b -> Float (float_of_int a *. b)
@@ -191,7 +186,7 @@ and bin_mul a b =
   | _ -> raise (TypeError (a, b))
 
 and bin_div a b =
-  match a, b with
+  match (a, b) with
   | Int a, Int b -> Int (a / b)
   | Float a, Float b -> Float (a /. b)
   | Int a, Float b -> Float (float_of_int a /. b)
@@ -199,7 +194,7 @@ and bin_div a b =
   | _ -> raise (TypeError (a, b))
 
 and bin_gt a b =
-  match a, b with
+  match (a, b) with
   | Int a, Int b -> bool_to_atom (a > b)
   | Float a, Float b -> bool_to_atom Float.(a > b)
   | Int a, Float b -> bool_to_atom Float.(float_of_int a > b)
@@ -207,7 +202,7 @@ and bin_gt a b =
   | _ -> raise (TypeError (a, b))
 
 and bin_lt a b =
-  match a, b with
+  match (a, b) with
   | Int a, Int b -> bool_to_atom (a < b)
   | Float a, Float b -> bool_to_atom Float.(a < b)
   | Int a, Float b -> bool_to_atom Float.(float_of_int a < b)
@@ -229,13 +224,14 @@ and bin_lte a b =
   | other -> failwith (show_value other)
 
 and bin_mod a b =
-  match a, b with
+  match (a, b) with
   | Int a, Int b -> Int (a mod b)
   | _ -> raise (TypeError (a, b))
 
 and str vals =
   String
-    (List.fold vals ~init:"" ~f:(fun acc value -> String.append acc @@ show_value value))
+    (List.fold vals ~init:"" ~f:(fun acc value ->
+         String.append acc @@ show_value value))
 
 and io_puts value =
   print_endline @@ show_value @@ List.hd_exn value;
@@ -314,21 +310,24 @@ and zip_pairs lst =
   aux lst []
 
 and cond (vals : value list) : value =
-  if not (List.length vals % 2 = 0) then raise (InvalidArg "argument count must be even");
+  if not (List.length vals % 2 = 0) then
+    raise (InvalidArg "argument count must be even");
   let pred_thens = zip_pairs vals in
   let res =
     List.find pred_thens ~f:(fun (pred, _) ->
-      match pred with
-      | Atom "true" -> true
-      | Thunk pred -> equal_value (pred ()) (Atom "true")
-      | _ -> false)
+        match pred with
+        | Atom "true" -> true
+        | Thunk pred -> equal_value (pred ()) (Atom "true")
+        | _ -> false)
   in
   match res with
   | Some (_, Thunk v) -> v ()
-  | None -> raise (MatchError "No cond clause matched. Perhaps a missing else clause?")
+  | None ->
+      raise (MatchError "No cond clause matched. Perhaps a missing else clause?")
   | _ -> failwith "cond body should be a thunk"
 
-and print_arg_list vals = List.iter vals ~f:(fun arg -> print_endline @@ show_value arg)
+and print_arg_list vals =
+  List.iter vals ~f:(fun arg -> print_endline @@ show_value arg)
 
 and nil (vals : value list) =
   match vals with
@@ -384,6 +383,13 @@ and values = function
 
 and pairs = function
   | [ Map m ] ->
-    List (List.map ~f:(fun (k, v) -> ConsCell (Atom k, v)) @@ MlispMap.pairs m)
+      List (List.map ~f:(fun (k, v) -> ConsCell (Atom k, v)) @@ MlispMap.pairs m)
   | _ -> assert false
-;;
+
+and get_map = function
+  | [ x; Map m ] -> (
+      let res = MlispMap.get m @@ show_value x in
+      match res with
+      | Some v -> v
+      | None -> Atom "nil")
+  | _ -> assert false
