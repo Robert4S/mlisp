@@ -1,5 +1,6 @@
 open Mlisp
 open Core
+open Environment
 open! Cases
 module F = Fmt
 
@@ -52,4 +53,4 @@ let () =
       let filename = args.(2) in
       let _ = Parse.get_text (Out_channel.create "/dev/null") filename () in
       ())
-  else repl "" (Potentially.populate ()) ()
+  else repl "" (Env.populate ()) ()

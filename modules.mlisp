@@ -1,0 +1,5 @@
+(def show 
+  (defmod 
+    (
+     (def print io-puts)
+     (defun times-two (x) (* x 2)))))

@@ -3,25 +3,6 @@
     1
     (* n (fact (- n 1)))))
 
-(defun map (ls f)
-  (if (nil? ls) nil
-    (cons (f (hd ls))
-          (map (tail ls) f))))
-
-(defun filter (ls pred)
-  (cond
-    (nil? ls) nil
-    (pred (hd ls))
-      (cons (hd ls) (filter (tail ls) pred))
-    :else (filter (tail ls) pred)))
-
-(defun rev-inner (ls acc) 
-  (cond
-    (nil? ls) acc
-    :else (rev-inner (tail ls) (cons (hd ls) acc))))
-
-(defun rev (ls) (rev-inner ls nil))
-
 (defun add-5 (a) (+ a 5))
 (defun even? (a) (= 0 (mod a 2)))
 
@@ -43,7 +24,7 @@
                        (- n 1)
                        (tail lst)
                        (cons ((hd lst)) acc))
-    :else (take-inner (- n 1) (tail lst) (cons (hd lst) acc))))
+    true (take-inner (- n 1) (tail lst) (cons (hd lst) acc))))
 
 (defun take (n lst) (rev (take-inner n lst nil)))
 

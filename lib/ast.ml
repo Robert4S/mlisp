@@ -13,6 +13,9 @@ type expr =
   | Def of string * expr
   | Quoted of expr
   | Fn of string list * expr
+  | Set of expr list
+  | ModAccess of expr * string
+  | DefMod of expr
 [@@deriving show { with_path = false }, eq, ord, sexp]
 
 module ExprComparable : Set_intf.Elt with type t = expr = struct

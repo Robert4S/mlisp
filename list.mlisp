@@ -1,0 +1,19 @@
+(defun map (ls f)
+  (if (nil? ls) nil
+    (cons (f (hd ls))
+          (map (tail ls) f))))
+
+(defun filter (ls pred)
+  (cond
+    (nil? ls) nil
+    (pred (hd ls))
+      (cons (hd ls) (filter (tail ls) pred))
+    true (filter (tail ls) pred)))
+
+(defun rev-inner (ls acc) 
+  (cond
+    (nil? ls) acc
+    true (rev-inner (tail ls) (cons (hd ls) acc))))
+
+(defun rev (ls) (rev-inner ls nil))
+
