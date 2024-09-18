@@ -167,19 +167,20 @@ with type env_t = Env.t) = struct
   type t = { env : Env.t; name : string option } [@@deriving show]
   type env_t = Env.t
 
-  let remake env name = { env; name }
+  let rec remake env name = { env; name }
 
-  let with_file name =
+  and with_file name =
     let contents = In_channel.read_all (name ^ ".mlisp") in
-    let mod_ = { env = Env.populate (); name = Some name } in
     let expr = Parse.parse contents in
-    let _ = Eval.eval mod_ expr in
-    mod_
+    create ~name:(Some name) expr
 
-  let create ?(name = None) expr =
+  and create ?(name = None) expr =
     let mod_ = { env = Env.populate (); name } in
-    let _ = Eval.eval mod_ expr in
-    mod_
+    match expr with
+    | List xs ->
+        List.iter xs ~f:(fun e -> Eval.eval mod_ e |> ignore);
+        mod_
+    | _ -> mod_
 
   let get_env { env; name = _ } = env
   let equal _ _ = false
