@@ -44,6 +44,8 @@ end = struct
 end
 
 and Value : sig
+  type userdef_t
+
   type t =
     | Int of int
     | Float of float
@@ -57,11 +59,16 @@ and Value : sig
     | Ref of t ref
     | Set of t list
     | Module of Mod.t
+    | UserDefined of userdef_t
   [@@deriving eq, ord, show, sexp]
 
   exception TypeError of t * t
   exception ArgError of t * t list
+
+  val typeof : t list -> t
 end = struct
+  type userdef_t = Types.value
+
   type t =
     | Int of int
     | Float of float
@@ -75,6 +82,7 @@ end = struct
     | Ref of t ref
     | Set of t list
     | Module of Mod.t
+    | UserDefined of Types.value
   [@@deriving eq, ord]
 
   exception TypeError of t * t
@@ -102,6 +110,43 @@ end = struct
         | _ -> ());
         Format.fprintf formatter "}"
     | Module _ -> Format.fprintf formatter "<Module>"
+    | UserDefined u ->
+        let name = Types.name @@ Types.get_type u in
+        let inner = Types.inner u in
+        Format.fprintf formatter "#%s" name;
+        MlispMap.pp pp formatter inner
+
+  and typeof (vals : Value.t list) : Value.t =
+    let rec aux vals acc : string =
+      match vals with
+      | [] -> acc
+      | x :: xs ->
+          let curr =
+            match x with
+            | Value.String _ -> "String "
+            | Atom a -> sprintf "Atom %s " a
+            | Function _ -> "Function "
+            | Int _ -> "Int "
+            | Float _ -> "Float "
+            | Thunk _ -> "Thunk "
+            | List _ -> "List "
+            | ConsCell (a, b) ->
+                sprintf "ConsCell (%s) (%s) " (aux [ a ] "") (aux [ b ] "")
+            | Map _ -> "Map "
+            | Ref r ->
+                "Ref "
+                ^ (function
+                    | String s -> s
+                    | _ -> assert false)
+                @@ typeof [ !r ]
+            | Set _ -> "Set "
+            | Module _ -> "Module "
+            | UserDefined x -> Types.name (Types.get_type x) ^ " "
+          in
+          let acc = String.append acc curr in
+          aux xs acc
+    in
+    String (aux vals "")
 
   let show value = Format.asprintf "%a" pp value
   let sexp_of_t = sexp_of_opaque
@@ -110,36 +155,43 @@ end
 
 and Mod : (sig
   type env_t
-  type t [@@deriving eq, ord]
+  type t [@@deriving eq, ord, show]
 
   val with_file : string -> t
-  val create : expr -> t
+  val create : ?name:string option -> expr -> t
   val get_env : t -> env_t
+  val name : t -> string option
+  val remake : env_t -> string option -> t
 end
 with type env_t = Env.t) = struct
-  type t = { env : Env.t }
+  type t = { env : Env.t; name : string option } [@@deriving show]
   type env_t = Env.t
+
+  let remake env name = { env; name }
 
   let with_file name =
     let contents = In_channel.read_all (name ^ ".mlisp") in
-    let env = Env.populate () in
-    Parse.evaluate_program env contents;
-    { env }
+    let mod_ = { env = Env.populate (); name = Some name } in
+    let expr = Parse.parse contents in
+    let _ = Eval.eval mod_ expr in
+    mod_
 
-  let create expr =
-    let env = Env.populate () in
-    Parse.evaluate_expr env expr;
-    { env }
+  let create ?(name = None) expr =
+    let mod_ = { env = Env.populate (); name } in
+    let _ = Eval.eval mod_ expr in
+    mod_
 
-  let get_env { env } = env
+  let get_env { env; name = _ } = env
   let equal _ _ = false
   let compare _ _ = Int.max_value
+  let name { env = _; name } = name
 end
 
 and Eval : sig
-  val eval : Env.t -> expr -> Value.t
-  val handle_userdef_call : Value.t gen_hashtable -> func -> Value.t gen_func
+  val eval : Mod.t -> expr -> Value.t
+  val handle_userdef_call : Mod.t -> func -> Value.t gen_func
   val bound_frame : string list -> expr -> Env.t -> Env.t
+  val remake : ?name:string option -> Env.t -> Mod.t
 end = struct
   open Core
   open Ast
@@ -158,6 +210,8 @@ end = struct
     | Quoted e ->
         vars e
     | _ -> []
+
+  and remake ?(name = None) env = Mod.remake env name
 
   and bound_vars args body =
     let vars = ExprSet.of_list @@ List.map ~f:(fun x -> Atom x) @@ vars body in
@@ -180,21 +234,18 @@ end = struct
     in
     Env.make vals
 
-  and handle_defun args body (env : Env.t) =
-    let captured = Env.to_tbl_list @@ bound_frame args body env in
+  and handle_defun args body (env : Mod.t) =
+    let captured = Env.to_tbl_list @@ bound_frame args body (Mod.get_env env) in
     Value.Function (`Userdefined ({ args; body }, captured))
 
-  and handle_userdef_call
-      (env : Value.t gen_hashtable)
-      (f : func)
-      (args : Value.t list) =
-    let env = Env.of_tbl_list env in
+  and handle_userdef_call (mod_ : Mod.t) (f : func) (args : Value.t list) =
+    let env = Mod.get_env mod_ in
     let env = Env.push env in
     if not (List.length args = List.length f.args) then
       raise (Value.ArgError (Function (`Userdefined (f, Env.to_tbl_list env)), args));
     List.iter (List.zip_exn f.args args) ~f:(fun (name, value) ->
         Env.update env name ~f:(fun _ -> value));
-    eval env f.body
+    eval (Mod.remake env (Mod.name mod_)) f.body
 
   and all predicate xs =
     match xs with
@@ -220,7 +271,7 @@ end = struct
     then Value.Thunk (fun () -> func @@ eval_all args)
     else func @@ eval_all args
 
-  and handle_call env func name args =
+  and handle_call (env : Mod.t) func name args =
     match func with
     | Value.Function (`Internal f) -> (
         match name with
@@ -235,7 +286,9 @@ end = struct
             funcall f args)
     | Function (`Userdefined (f, new_env)) ->
         let args = List.map args ~f:(eval env) in
-        funcall (handle_userdef_call new_env f) args
+        funcall
+          (handle_userdef_call (Mod.remake (Env.of_tbl_list new_env) None) f)
+          args
     | _ ->
         let args = List.map args ~f:(eval env) in
         raise @@ Value.TypeError (Value.List args, func)
@@ -249,7 +302,7 @@ end = struct
     in
     aux exprs []
 
-  and handle_map_access env m field =
+  and handle_map_access (env : Mod.t) m field =
     match eval env m with
     | Value.Map m -> (
         match MlispMap.get m field with
@@ -257,7 +310,7 @@ end = struct
         | None -> Atom "nil")
     | _ -> raise @@ SyntaxError "temporary problem"
 
-  and define_map env args =
+  and define_map (env : Mod.t) args =
     let pairs =
       List.chunks_of args ~length:2
       |> List.map ~f:(function
@@ -268,44 +321,45 @@ end = struct
     in
     Result.(MlispMap.create pairs >>= fun pairs -> Ok (Value.Map pairs))
 
-  and eval (env : Env.t) (value : expr) : Value.t =
+  and eval : Mod.t -> expr -> Value.t =
+   fun mod_ value ->
     match value with
     | DefMod e ->
         let new_mod = Mod.create e in
         Module new_mod
     | Atom v when Char.equal ':' (String.to_array v).(0) ->
-        if String.(v = ":ls") then F.pr "%s" (Env.show env);
+        if String.(v = ":ls") then F.pr "%s" (Env.show (Mod.get_env mod_));
         Value.Atom v
     | ModAccess (module_name, field) -> (
-        match eval env module_name with
+        match eval mod_ module_name with
         | Module m -> (
             match Env.find (Mod.get_env m) field with
             | Some v -> v
             | None -> Atom "nil")
         | _ -> failwith "not a module")
-    | Fn (args, body) -> handle_defun args body env
+    | Fn (args, body) -> handle_defun args body mod_
     | Defun (name, args, body) ->
-        let func = handle_defun args body env in
-        Env.update env name ~f:(fun _ -> func);
+        let func = handle_defun args body mod_ in
+        Env.update (Mod.get_env mod_) name ~f:(fun _ -> func);
         (match func with
         | Function (`Userdefined (_, captured)) ->
             Env.update (Env.of_tbl_list captured) name ~f:(fun _ -> func)
         | _ -> ());
         Value.Atom "nil"
     | Map pairs -> (
-        match define_map env pairs with
+        match define_map mod_ pairs with
         | Ok res -> res
         | Error key -> raise @@ KeyError key)
     | List [ Atom "import"; Atom imported ] ->
         let new_module = Value.Module (Mod.with_file imported) in
-        Env.update env imported ~f:(fun _ -> new_module);
+        Env.update (Mod.get_env mod_) imported ~f:(fun _ -> new_module);
         new_module
     | List (Atom "do" :: exprs) ->
         let rec evaldo exprs =
           match exprs with
-          | [ last ] -> eval env last
+          | [ last ] -> eval mod_ last
           | x :: xs ->
-              let _ = eval env x in
+              let _ = eval mod_ x in
               evaldo xs
           | [] -> Atom "nil"
         in
@@ -317,46 +371,47 @@ end = struct
           only_atoms @@ List.filteri assignls ~f:(fun idx _ -> idx mod 2 = 0)
         in
         let values =
-          List.map ~f:(eval env)
+          List.map ~f:(eval mod_)
           @@ List.filteri assignls ~f:(fun idx _ -> not (idx mod 2 = 0))
         in
-        handle_userdef_call (Env.to_tbl_list env) { args = names; body } values
+        handle_userdef_call mod_ { args = names; body } values
     | List [ Atom "open"; Atom imported ] ->
         let new_mod = Mod.with_file imported in
-        let new_env = Env.push_frame env (Mod.get_env new_mod) in
+        let new_env = Env.push_frame (Mod.get_env mod_) (Mod.get_env new_mod) in
         Env.pairs new_env
-        |> List.iter ~f:(fun (key, value) -> Env.update env key ~f:(fun _ -> value));
+        |> List.iter ~f:(fun (key, value) ->
+               Env.update (Mod.get_env mod_) key ~f:(fun _ -> value));
         Module new_mod
     | List [ Atom "get"; field; m ] ->
-        handle_map_access env m (Value.show @@ eval env field)
+        handle_map_access mod_ m (Value.show @@ eval mod_ field)
     | List [ Atom n; e ] when Char.equal (String.to_array n).(0) ':' ->
-        handle_map_access env e n
+        handle_map_access mod_ e n
     | List (Atom name :: args) -> (
-        match eval env (Atom name) with
-        | Function f -> handle_call env (Function f) name args
+        match eval mod_ (Atom name) with
+        | Function f -> handle_call mod_ (Function f) name args
         | other -> raise @@ Value.TypeError (other, Env.unreachable ()))
     | List (func :: args) -> (
-        match eval env func with
-        | Function f -> handle_call env (Function f) "" args
+        match eval mod_ func with
+        | Function f -> handle_call mod_ (Function f) "" args
         | other -> raise @@ Value.TypeError (other, Env.unreachable ()))
     | Def (name, value) ->
-        let value = eval env value in
-        Env.update env name ~f:(fun _ -> value);
+        let value = eval mod_ value in
+        Env.update (Mod.get_env mod_) name ~f:(fun _ -> value);
         Value.Atom "nil"
     | Int i -> Value.Int i
     | Float f -> Value.Float f
-    | Quoted (List exprs) -> Value.List (List.map exprs ~f:(eval env))
-    | Atom name -> Env.find_exn env name
+    | Quoted (List exprs) -> Value.List (List.map exprs ~f:(eval mod_))
+    | Atom name -> Env.find_exn (Mod.get_env mod_) name
     | String s -> Value.String s
-    | ConsCell (car, cdr) -> Value.ConsCell (eval env car, eval env cdr)
+    | ConsCell (car, cdr) -> Value.ConsCell (eval mod_ car, eval mod_ cdr)
     | List [] -> Value.List []
-    | Quoted e -> Value.Thunk (fun _ -> eval env e)
+    | Quoted e -> Value.Thunk (fun _ -> eval mod_ e)
     | Eof -> Atom "nil"
-    | Set ys -> Value.Set (List.map ~f:(eval env) ys)
+    | Set ys -> Value.Set (List.map ~f:(eval mod_) ys)
 end
 
 and Env : sig
-  type t
+  type t [@@deriving show]
 
   val of_tbl_list : Value.t gen_hashtable -> t
   val to_tbl_list : t -> Value.t gen_hashtable
@@ -415,6 +470,9 @@ end = struct
     @@ List.sort ~compare:(fun (key1, _) (key2, _) -> String.compare key1 key2)
     @@ List.zip_exn keys data
 
+  and pp (formatter : Format.formatter) env =
+    Format.fprintf formatter "%s" (show env)
+
   and find e name =
     match e with
     | [] -> None
@@ -451,10 +509,10 @@ end
 
 and Parse : sig
   val parse : string -> expr
-  val eval_put : Out_channel.t -> Env.t -> string -> unit
-  val evaluate_program : Env.t -> string -> unit
-  val evaluate_expr : Env.t -> expr -> unit
-  val get_text : Out_channel.t -> string -> unit -> Env.t
+  val eval_put : Out_channel.t -> Mod.t -> string -> unit
+  val evaluate_program : Mod.t -> string -> unit
+  val evaluate_expr : Mod.t -> expr -> unit
+  val get_text : string -> unit -> Mod.t
 end = struct
   let parse (s : string) : expr =
     let lexbuf = Lexing.from_string s in
@@ -471,7 +529,7 @@ end = struct
         Printf.fprintf oc "%s\n" @@ Value.show @@ List.hd_exn evaluated
     | _ -> ()
 
-  let evaluate_program (env : Env.t) (s : string) = eval_put Out_channel.stdout env s
+  let evaluate_program (env : Mod.t) (s : string) = eval_put Out_channel.stdout env s
 
   let evaluate_expr env expr =
     match expr with
@@ -481,9 +539,45 @@ end = struct
         @@ Value.show @@ List.hd_exn evaluated
     | _ -> ()
 
-  let get_text oc filename () =
-    let text = In_channel.read_all filename in
-    let env = Env.populate () in
-    eval_put oc env text;
+  let get_text filename () =
+    let env = Mod.with_file filename in
     env
+end
+
+and Types : sig
+  type t [@@deriving eq, show, ord]
+  type value [@@deriving eq, show, ord]
+
+  val create : string -> Mod.t -> string list -> t
+  val parent : t -> Mod.t
+  val name : t -> string
+  val fields : t -> string list
+  val field_exists : t -> string -> bool
+  val construct : t -> Value.t MlispMap.t -> value option
+  val get : value -> string -> Value.t option
+  val get_type : value -> t
+  val inner : value -> Value.t MlispMap.t
+end = struct
+  type t = { name : string; parent : Mod.t; field_names : string list }
+  [@@deriving eq, show, ord]
+
+  type value = t * Value.t MlispMap.t [@@deriving eq, show, ord]
+
+  let create name parent field_names = { name; parent; field_names }
+  let parent { parent; field_names = _; name = _ } = parent
+  let fields { parent = _; field_names; name = _ } = field_names
+  let name { parent = _; field_names = _; name } = name
+
+  let field_exists { parent = _; field_names; name = _ } field =
+    List.mem field_names field ~equal:String.equal
+
+  let construct { parent; field_names; name } map =
+    let keys = List.map ~f:(fun (key, _value) -> key) @@ MlispMap.pairs map in
+    if List.for_all keys ~f:(field_exists { name; parent; field_names }) then
+      Some ({ parent; field_names; name }, map)
+    else None
+
+  let inner (_, contents) = contents
+  let get_type (t, _) = t
+  let get (_type, contents) field = MlispMap.get contents field
 end

@@ -45,12 +45,12 @@ let () =
   if Array.length args = 3 then (
     if String.(args.(1) = "-r") then (
       let filename = args.(2) in
-      let env = Parse.get_text Out_channel.stdout filename () in
+      let env = Parse.get_text filename () in
       let name = String.drop_suffix filename 6 in
       Out_channel.(flush stdout);
       repl name env ())
     else if String.(args.(1) = "-c") then
       let filename = args.(2) in
-      let _ = Parse.get_text (Out_channel.create "/dev/null") filename () in
+      let _ = Parse.get_text filename () in
       ())
-  else repl "" (Env.populate ()) ()
+  else repl "" (Mod.remake (Env.populate ()) (Some "repl")) ()

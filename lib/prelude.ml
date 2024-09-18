@@ -9,6 +9,8 @@ end) (MlispMap : sig
   val get : 'a t -> string -> 'a option
   val pairs : 'a t -> (string * 'a) list
 end) (Value : sig
+  type userdef_t
+
   type t =
     | Int of int
     | Float of float
@@ -22,17 +24,20 @@ end) (Value : sig
     | Ref of t ref
     | Set of t list
     | Module of Mod.t
+    | UserDefined of userdef_t
   [@@deriving eq, ord, show, sexp]
 
   exception TypeError of t * t
   exception ArgError of t * t list
+
+  val typeof : t list -> t
 end) (Env : sig
   type t
 
   val of_tbl_list : Value.t gen_hashtable -> t
-  val to_tbl_list : t -> Value.t gen_hashtable
 end) (Eval : sig
-  val handle_userdef_call : Value.t gen_hashtable -> func -> Value.t gen_func
+  val handle_userdef_call : Mod.t -> func -> Value.t gen_func
+  val remake : ?name:string option -> Env.t -> Mod.t
 end) : sig
   val items : unit -> (string * Value.t) list
 end = struct
@@ -65,7 +70,7 @@ end = struct
       ("values", Function (`Internal values));
       ("pairs", Function (`Internal pairs));
       ("quit", Function (`Internal quit));
-      ("type", Function (`Internal typeof));
+      ("type", Function (`Internal Value.typeof));
       ("get", Function (`Internal get_comb));
       ("ref", Function (`Internal ref_));
       ("set", Function (`Internal set));
@@ -356,37 +361,7 @@ end = struct
     exit 0
 
   and eval_function func (env : Env.t) =
-    Eval.handle_userdef_call (Env.to_tbl_list env) func []
-
-  and string_of_value_exn = function
-    | Value.String x -> x
-    | _ -> assert false
-
-  and typeof (vals : Value.t list) : Value.t =
-    let rec aux vals acc : string =
-      match vals with
-      | [] -> acc
-      | x :: xs ->
-          let curr =
-            match x with
-            | Value.String _ -> "String "
-            | Atom a -> sprintf "Atom %s " a
-            | Function _ -> "Function "
-            | Int _ -> "Int "
-            | Float _ -> "Float "
-            | Thunk _ -> "Thunk "
-            | List _ -> "List "
-            | ConsCell (a, b) ->
-                sprintf "ConsCell (%s) (%s) " (aux [ a ] "") (aux [ b ] "")
-            | Map _ -> "Map "
-            | Ref r -> "Ref " ^ string_of_value_exn @@ typeof [ !r ]
-            | Set _ -> "Set "
-            | Module _ -> "Module "
-          in
-          let acc = String.append acc curr in
-          aux xs acc
-    in
-    String (aux vals "")
+    Eval.handle_userdef_call (Eval.remake env) func []
 
   and get_comb = function
     | [ v; Value.Map m ] -> get_map [ v; Map m ]

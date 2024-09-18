@@ -1,7 +1,7 @@
 open! Core
 open Environment
 
-let env = Env.populate ()
+let env = Eval.remake @@ Env.populate ()
 
 let%expect_test "simple expression" =
   let _ = Parse.evaluate_program env "5" in
@@ -48,7 +48,7 @@ let%expect_test "variable captures" =
       \          1\n\n\
       \          (* n (fact (- n 1)))))\n"
   in
-  let bound_vars = Eval.bound_frame [ "n" ] program env in
+  let bound_vars = Eval.bound_frame [ "n" ] program (Mod.get_env env) in
   Fmt.pr "%s" @@ Env.show bound_vars;
   [%expect
     {|
@@ -60,13 +60,13 @@ let%expect_test "variable captures" =
     |}]
 
 let%expect_test "clojure-like maps" =
-  let env = Env.populate () in
+  let env = Eval.remake @@ Env.populate () in
   let program = "(def my-map {:hello \"world\"}) (get :hello my-map)" in
   let _ = Parse.evaluate_program env program in
   [%expect {|"world"|}]
 
 let%expect_test "object syntax" =
-  let env = Env.populate () in
+  let env = Eval.remake @@ Env.populate () in
   let program = "(def my-map {:hello \"world\"}) (:hello my-map)" in
   let _ = Parse.evaluate_program env program in
   [%expect {| "world" |}]
@@ -79,4 +79,5 @@ let%expect_test "import syntax" =
 let%expect_test "module access" =
   let program = "(hello.world '())" in
   Fmt.pr "%s" (Ast.show_expr @@ Parse.parse program);
-  [%expect {| (List [(List [(ModAccess ((Atom "hello"), "world")); (Quoted (List []))])]) |}]
+  [%expect
+    {| (List [(List [(ModAccess ((Atom "hello"), "world")); (Quoted (List []))])]) |}]
