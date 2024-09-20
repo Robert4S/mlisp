@@ -6,19 +6,16 @@ open Ast
 %token <string> ATOM
 %token <float> FLOAT
 %token <string> STRING
+%token <string> STRUCT
 
-%token DEF
-%token DEFUN
 %token LPAREN "("
 %token RPAREN ")"
 %token EOF
 %token QUOTE "'"
 %token DOT "."
-%token FN
 %token LBRAC "{"
 %token RBRAC "}"
 %token HASH "#"
-%token DEFMOD
 
 %start <expr option> prog
 %%
@@ -35,10 +32,7 @@ expr:
   | a = ATOM {Atom a}
   | i = INT {Int i}
   | f = FLOAT {Float f}
-  | LPAREN; DEFMOD; e = expr; RPAREN {DefMod e}
-  | LPAREN; FN; LPAREN; args = list(ATOM); RPAREN; e = expr; RPAREN; {Fn (args, e)}
-  | LPAREN; DEF; name = ATOM; e = expr; RPAREN {Def (name, e)}
-  | LPAREN; DEFUN; name = ATOM; LPAREN; args = list(ATOM); RPAREN; e = expr; RPAREN {Defun (name, args, e)}
+  | name = STRUCT; LBRAC; es = list(expr); RBRAC {TypeCreate (name, es)}
   | HASH; LBRAC; es = list(expr); RBRAC {Set es}
   | LBRAC; es = list(expr); RBRAC {Map es}
   | LPAREN; es = list(expr); RPAREN {List es}

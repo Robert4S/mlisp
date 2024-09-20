@@ -10,22 +10,20 @@ let float = digit* frac? exp?
 let newline = '\r' | '\n' | "\r\n"
 let white = [' ' '\t' ',' '\n' '\r']+
 let id = [^ '.' '(' ')' '\t' '\n' '\r' ' ' ';' '"' '{' '}' '#']*
+let struct_create = ['#'] id
 
 rule read =
   parse
   | white {read lexbuf}
   | int {INT (int_of_string (Lexing.lexeme lexbuf))}
+  | struct_create {STRUCT (Lexing.lexeme lexbuf)}
   | "." {DOT}
   | "#" {HASH}
   | float    { FLOAT (float_of_string (Lexing.lexeme lexbuf)) }
-  | "fun" {FN}
-  | "defun" {DEFUN}
-  | "def" {DEF}
   | "'" {QUOTE}
   | "{" {LBRAC}
   | "}" {RBRAC}
   | "." {DOT}
-  | "defmod" {DEFMOD}
   | id {ATOM (Lexing.lexeme lexbuf)}
   | "(" {LPAREN}
   | ")" {RPAREN}

@@ -81,3 +81,8 @@ let%expect_test "module access" =
   Fmt.pr "%s" (Ast.show_expr @@ Parse.parse program);
   [%expect
     {| (List [(List [(ModAccess ((Atom "hello"), "world")); (Quoted (List []))])]) |}]
+
+let%expect_test "userdef type instantiation" =
+  let program = "%Hello{:world 10}" in
+  Fmt.pr "%s" (Ast.show_expr @@ Parse.parse program);
+  [%expect {| (List [(TypeCreate ("%Hello", [(Atom ":world"); (Int 10)]))]) |}]

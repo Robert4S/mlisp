@@ -3,6 +3,8 @@ open Ast
 open Common_types
 module F = Fmt
 
+let todo _ = failwith "todo"
+
 module rec Builtins : sig
   val items : unit -> (string * Value.t) list
 end =
@@ -15,6 +17,7 @@ and MlispMap : sig
   val get : 'a t -> string -> 'a option
   val pairs : 'a t -> (string * 'a) list
   val pp : (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a t -> unit
+  val insert : string -> 'a t -> 'a -> unit
 end = struct
   type 'a t = 'a String.Map.t [@@deriving eq, ord]
 
@@ -43,7 +46,7 @@ end = struct
     Format.fprintf formatter "}"
 end
 
-and Value : sig
+and Value : (sig
   type userdef_t
 
   type t =
@@ -66,7 +69,8 @@ and Value : sig
   exception ArgError of t * t list
 
   val typeof : t list -> t
-end = struct
+end
+with type userdef_t = Types.value) = struct
   type userdef_t = Types.value
 
   type t =
@@ -161,13 +165,18 @@ and Mod : (sig
   val create : ?name:string option -> expr -> t
   val get_env : t -> env_t
   val name : t -> string option
-  val remake : env_t -> string option -> t
+  val remake : ?t:Types.t option -> env_t -> string option -> t
+  val add_type : t -> Types.t -> unit
+  val get_t : t -> Types.t option
 end
 with type env_t = Env.t) = struct
-  type t = { env : Env.t; name : string option } [@@deriving show]
+  type t = { env : Env.t; name : string option; mutable t : Types.t option }
+  [@@deriving show]
+
   type env_t = Env.t
 
-  let rec remake env name = { env; name }
+  let rec remake ?(t = None) env name = { env; name; t }
+  and add_type x t = x.t <- Some t
 
   and with_file name =
     let contents = In_channel.read_all (name ^ ".mlisp") in
@@ -175,17 +184,18 @@ with type env_t = Env.t) = struct
     create ~name:(Some name) expr
 
   and create ?(name = None) expr =
-    let mod_ = { env = Env.populate (); name } in
+    let mod_ = { env = Env.populate (); name; t = None } in
     match expr with
     | List xs ->
         List.iter xs ~f:(fun e -> Eval.eval mod_ e |> ignore);
         mod_
     | _ -> mod_
 
-  let get_env { env; name = _ } = env
+  let get_env { env; name = _; t = _ } = env
   let equal _ _ = false
   let compare _ _ = Int.max_value
-  let name { env = _; name } = name
+  let name { env = _; name; t = _ } = name
+  let get_t { env = _; name = _; t } = t
 end
 
 and Eval : sig
@@ -205,11 +215,7 @@ end = struct
     | Atom n -> [ n ]
     | List xs -> List.(xs >>= vars)
     | ConsCell (a, b) -> vars a @ vars b
-    | Fn (_, e)
-    | Defun (_, _, e)
-    | Def (_, e)
-    | Quoted e ->
-        vars e
+    | Quoted e -> vars e
     | _ -> []
 
   and remake ?(name = None) env = Mod.remake env name
@@ -325,7 +331,67 @@ end = struct
   and eval : Mod.t -> expr -> Value.t =
    fun mod_ value ->
     match value with
-    | DefMod e ->
+    | TypeCreate (name, exprs) -> (
+        let name = String.drop_prefix name 1 in
+        let res =
+          let open Result.Let_syntax in
+          match Env.find (Mod.get_env mod_) name with
+          | Some (Module assoc_mod) -> (
+              let%bind type_ =
+                Result.of_option ~error:"module has no associated type"
+                @@ Mod.get_t assoc_mod
+              in
+              match eval mod_ (Ast.Map exprs) with
+              | Value.Map m ->
+                  Result.of_option ~error:"cannot construct struct"
+                  @@ Types.construct type_ m
+              | _ -> Error "value after name should be brackets")
+          | _ -> Error "no module of that name"
+        in
+        match res with
+        | Ok v -> UserDefined v
+        | Error e -> failwith e)
+    | List [ Atom "defun"; Atom name; List args; body ] ->
+        let args =
+          List.map
+            ~f:(function
+              | Atom n -> n
+              | _ -> assert false)
+            args
+        in
+        let func = handle_defun args body mod_ in
+        Env.update (Mod.get_env mod_) name ~f:(fun _ -> func);
+        (match func with
+        | Function (`Userdefined (_, captured)) ->
+            Env.update (Env.of_tbl_list captured) name ~f:(fun _ -> func)
+        | _ -> ());
+        Value.Atom "nil"
+    | List [ Atom "deftype"; Map fields ] ->
+        let fields =
+          List.map
+            ~f:(function
+              | Atom a -> a
+              | _ -> assert false)
+            fields
+        in
+        let new_type =
+          Types.create
+            (Mod.name mod_ |> function
+             | Some x -> x
+             | _ -> assert false)
+            mod_ fields
+        in
+        Mod.add_type mod_ new_type;
+        Atom "nil"
+    | List [ Atom "def"; Atom name; value ] ->
+        let value = eval mod_ value in
+        Env.update (Mod.get_env mod_) name ~f:(fun _ -> value);
+        Value.Atom "nil"
+    | List [ Atom "defmod"; Atom name; e ] ->
+        let new_module = Mod.create ~name:(Some name) e in
+        Env.update (Mod.get_env mod_) ~f:(fun _ -> Module new_module) name;
+        Module new_module
+    | List [ Atom "mod"; e ] ->
         let new_mod = Mod.create e in
         Module new_mod
     | Atom v when Char.equal ':' (String.to_array v).(0) ->
@@ -338,15 +404,15 @@ end = struct
             | Some v -> v
             | None -> Atom "nil")
         | _ -> failwith "not a module")
-    | Fn (args, body) -> handle_defun args body mod_
-    | Defun (name, args, body) ->
-        let func = handle_defun args body mod_ in
-        Env.update (Mod.get_env mod_) name ~f:(fun _ -> func);
-        (match func with
-        | Function (`Userdefined (_, captured)) ->
-            Env.update (Env.of_tbl_list captured) name ~f:(fun _ -> func)
-        | _ -> ());
-        Value.Atom "nil"
+    | List [ Atom "fun"; List args; body ] ->
+        let args =
+          List.map
+            ~f:(function
+              | Atom x -> x
+              | _ -> assert false)
+            args
+        in
+        handle_defun args body mod_
     | Map pairs -> (
         match define_map mod_ pairs with
         | Ok res -> res
@@ -395,10 +461,6 @@ end = struct
         match eval mod_ func with
         | Function f -> handle_call mod_ (Function f) "" args
         | other -> raise @@ Value.TypeError (other, Env.unreachable ()))
-    | Def (name, value) ->
-        let value = eval mod_ value in
-        Env.update (Mod.get_env mod_) name ~f:(fun _ -> value);
-        Value.Atom "nil"
     | Int i -> Value.Int i
     | Float f -> Value.Float f
     | Quoted (List exprs) -> Value.List (List.map exprs ~f:(eval mod_))
@@ -549,17 +611,17 @@ and Types : sig
   type t [@@deriving eq, show, ord]
   type value [@@deriving eq, show, ord]
 
-  val create : string -> Mod.t -> string list -> t
-  val parent : t -> Mod.t
+  val create : string -> string -> string list -> t
+  val parent : t -> string
   val name : t -> string
   val fields : t -> string list
   val field_exists : t -> string -> bool
-  val construct : t -> Value.t MlispMap.t -> value option
   val get : value -> string -> Value.t option
   val get_type : value -> t
   val inner : value -> Value.t MlispMap.t
+  val construct : t -> Value.t MlispMap.t -> value option
 end = struct
-  type t = { name : string; parent : Mod.t; field_names : string list }
+  type t = { name : string; parent : string; field_names : string list }
   [@@deriving eq, show, ord]
 
   type value = t * Value.t MlispMap.t [@@deriving eq, show, ord]
@@ -581,4 +643,44 @@ end = struct
   let inner (_, contents) = contents
   let get_type (t, _) = t
   let get (_type, contents) field = MlispMap.get contents field
+end
+
+and Trait : sig
+  type f [@@deriving show, eq, ord]
+  type t
+
+  val make_f : string -> int -> f
+  val make_trait : f list -> t
+  val add_implementer : t -> string -> Mod.t -> unit
+end = struct
+  type f = { name : string; args : int } [@@deriving show, eq, ord]
+  type t = { functions : f list; impls : (string, Mod.t) Hashtbl.t }
+
+  let make_f name args = { name; args }
+
+  let make_trait functions =
+    {
+      functions;
+      impls = (Hashtbl.create ~growth_allowed:true ~size:10) (module String);
+    }
+
+  let add_implementer x name i = Hashtbl.update x.impls name ~f:(fun _ -> i)
+
+  let to_mod { functions; impls } =
+    let get_impl func args =
+      match args with
+      | [] -> assert false
+      | Value.UserDefined t :: rest -> (
+          let value_type = Types.get_type t in
+          match Hashtbl.find impls (Types.parent value_type) with
+          | Some m -> (
+              match Env.find (Mod.get_env m) func.name with
+              | Some (Function f) -> failwith "todo"
+              | _ -> failwith "trait not implemented")
+          | _ -> failwith "module not found")
+      | _ ->
+          failwith
+            "first argument of trait function must be a module associated type"
+    in
+    failwith "todo"
 end

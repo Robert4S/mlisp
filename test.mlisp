@@ -6,7 +6,6 @@
 (defun add-5 (a) (+ a 5))
 (defun even? (a) (= 0 (mod a 2)))
 
-(def numbersc (1 . (2 . (3 . (4 . (5 . (6 . (7 . ( 8 . (9 . (10 . nil)))))))))))
 (def numbersl '(1 2 3 4 5 6 7 8 9 10))
 
 (defun call (a) (a))

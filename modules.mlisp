@@ -1,5 +1,3 @@
-(def show 
-  (defmod 
-    (
-     (def print io-puts)
-     (defun times-two (x) (* x 2)))))
+(defmod show 
+  ((def y 10)
+   (def z "hello")))
