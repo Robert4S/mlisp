@@ -10,6 +10,7 @@ end) (MlispMap : sig
   val pairs : 'a t -> (string * 'a) list
 end) (Value : sig
   type userdef_t
+  type trait_t
 
   type t =
     | Int of int
@@ -25,19 +26,16 @@ end) (Value : sig
     | Set of t list
     | Module of Mod.t
     | UserDefined of userdef_t
+    | Trait of trait_t
   [@@deriving eq, ord, show, sexp]
 
   exception TypeError of t * t
   exception ArgError of t * t list
 
   val typeof : t list -> t
-end) (Env : sig
-  type t
-
-  val of_tbl_list : Value.t gen_hashtable -> t
 end) (Eval : sig
   val handle_userdef_call : Mod.t -> func -> Value.t gen_func
-  val remake : ?name:string option -> Env.t -> Mod.t
+  val remake : ?name:string option -> Value.t Env.t -> Mod.t
 end) : sig
   val items : unit -> (string * Value.t) list
 end = struct
@@ -360,7 +358,7 @@ end = struct
     print_endline "Goodbye!";
     exit 0
 
-  and eval_function func (env : Env.t) =
+  and eval_function func (env : Value.t Env.t) =
     Eval.handle_userdef_call (Eval.remake env) func []
 
   and get_comb = function

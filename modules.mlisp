@@ -1,3 +1,0 @@
-(defmod show 
-  ((def y 10)
-   (def z "hello")))

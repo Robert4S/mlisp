@@ -1,0 +1,3 @@
+(deftrait Show (
+  (defun show (x))
+))

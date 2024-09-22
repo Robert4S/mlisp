@@ -53,4 +53,4 @@ let () =
       let filename = args.(2) in
       let _ = Parse.get_text filename () in
       ())
-  else repl "" (Mod.remake (Env.populate ()) (Some "repl")) ()
+  else repl "" (Mod.remake (Eval.populate ()) (Some "repl")) ()

@@ -1,0 +1,20 @@
+(defmod List 
+  ((deftype {:car :cdr})
+  (defun cons (x xs) #List{:car x :cdr xs})
+  (defun map (xs f)
+     (cond
+       (nil? xs) nil
+       else (cons (f (:car xs)) (map (:cdr xs) f))))))
+
+(defimpl show.Show List (
+  (defun show (xs) 
+    (do
+      (cond
+        (nil? xs) ""
+        :else (str (:car xs) "," (show (:cdr xs))))))))
+
+(deftrait mappable
+  ((defun map (xs f))))
+
+(defimpl mappable List
+  ((defun map (xs f) (do (List.map xs f)))))

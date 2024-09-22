@@ -44,3 +44,6 @@
       (+ squared squared))))
 
 (def myrange (lazy-range 0 1000000000))
+
+(deftrait ooga (
+  (defun do-something (x y))))
