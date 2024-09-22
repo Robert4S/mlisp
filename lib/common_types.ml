@@ -50,7 +50,11 @@ type trait_f = { name : string; args : int } [@@deriving show, eq, ord]
 type 'a mlispmap_t = 'a String.Map.t
 [@@deriving.show printer pp_mlispmap_t] [@@deriving eq, ord]
 
-type mod_t = { env : value_t env_t; name : string option; mutable t : type_t option }
+type mod_t = {
+  env : value_t env_t;
+  name : string option;
+  mutable t : type_t option;
+}
 [@@deriving.eq equal (fun _ _ -> false)]
 [@@deriving.ord compare (fun _ _ -> Int.max_value)]
 
@@ -69,7 +73,8 @@ and value_t =
   | Float of float
   | Atom of string
   | Function of
-      [ `Userdefined of func * value_t gen_hashtable | `Internal of value_t gen_func ]
+      [ `Userdefined of func * value_t gen_hashtable
+      | `Internal of value_t gen_func ]
   | String of string
   | List of value_t list
   | Thunk of value_t delayed

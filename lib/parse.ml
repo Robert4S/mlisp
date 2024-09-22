@@ -12,7 +12,7 @@ let eval_put (eval : eval) oc env s =
   match parsed with
   | List exprs ->
       let evaluated = List.map exprs ~f:(eval env) |> List.rev in
-      Printf.fprintf oc "%s\n" @@ show_value_t @@ List.hd_exn evaluated
+      Printf.fprintf oc "%s\n" @@ Value.show @@ List.hd_exn evaluated
   | _ -> ()
 
 let evaluate_program eval (env : mod_t) (s : string) =

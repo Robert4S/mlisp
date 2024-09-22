@@ -1,0 +1,10 @@
+(defmod List 
+  (
+   (deftype {:car :cdr})
+   (defun head (xs) (:car xs))
+   (defun tail (xs) (:cdr xs))
+   (defun map (xs f)
+     (cond 
+       (nil? xs) nil
+       :else #List{:car (f (head xs)) :cdr (map (tail xs) f)}))
+   ))
