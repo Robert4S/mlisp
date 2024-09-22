@@ -1,6 +1,8 @@
 open Core
 open Ast
 
+let todo _ = failwith "todo"
+
 exception InvalidArg of string
 exception MatchError of string
 exception Unbound of string
@@ -12,10 +14,29 @@ let compare_gen_func _ _ _ = Int.max_value
 let equal_gen_hashtable _ _ _ = false
 let compare_gen_hashtable _ _ _ = Int.max_value
 let pp_gen_hashtable _ formatter _ = Format.fprintf formatter "<Environment>"
-let equal_trait_t _ _ = false
+
+(* let equal_trait_t _ _ = false *)
 let pp_env_t _ ppf _ = Format.fprintf ppf "<Env>"
 let pp_delayed _ ppf _ = Format.fprintf ppf "<Thunk>"
 let pp_gen_func _ ppf _ = Format.fprintf ppf "<Thunk>"
+let pp_string_map _ _ _ = failwith "todo"
+let equal_string_map _ _ _ = failwith "todo"
+let compare_string_map _ _ _ = failwith "todo"
+
+let pp_mlispmap_t pp_value formatter map =
+  let pp_pair formatter (key, value) =
+    Format.fprintf formatter "%s = %a" key pp_value value
+  in
+  Format.fprintf formatter "{";
+  (match Map.to_alist map with
+  | [] -> ()
+  | [ pair ] -> pp_pair formatter pair
+  | pair :: pairs ->
+      pp_pair formatter pair;
+      List.iter pairs ~f:(fun pair ->
+          Format.fprintf formatter ", ";
+          pp_pair formatter pair));
+  Format.fprintf formatter "}"
 
 type 'a gen_hashtable = (string, 'a) Hashtbl.t list
 type 'a gen_func = 'a list -> 'a
@@ -31,7 +52,15 @@ type type_t = { parent : string; field_names : string list }
 
 type trait_f = { name : string; args : int } [@@deriving show, eq, ord]
 
-type mod_t = { env : value_t env_t; name : string option; mutable t : type_t option }
+type 'a mlispmap_t = 'a String.Map.t
+[@@deriving.show printer (fun _ ppf _ -> Format.fprintf ppf "<Map>")]
+[@@deriving eq, ord]
+
+type mod_t = {
+  env : value_t env_t;
+  name : string option;
+  mutable t : type_t option;
+}
 [@@deriving.eq equal (fun _ _ -> false)]
 [@@deriving.ord compare (fun _ _ -> Int.max_value)]
 
@@ -50,12 +79,13 @@ and value_t =
   | Float of float
   | Atom of string
   | Function of
-      [ `Userdefined of func * value_t gen_hashtable | `Internal of value_t gen_func ]
+      [ `Userdefined of func * value_t gen_hashtable
+      | `Internal of value_t gen_func ]
   | String of string
   | List of value_t list
   | Thunk of value_t delayed
   | ConsCell of value_t * value_t
-  | Map of value_t mlispmap_t
+  | MMap of value_t mlispmap_t
   | Ref of value_t ref
   | Set of value_t list
   | Module of mod_t
@@ -63,11 +93,12 @@ and value_t =
   | Trait of trait_t
 [@@deriving eq, ord]
 
-and 'a mlispmap_t = 'a String.Map.t
-[@@deriving.show printer (fun _ ppf _ -> Format.fprintf ppf "<Map>")]
-[@@deriving eq, ord]
-
 and type_value = type_t * value_t mlispmap_t [@@deriving eq, show, ord]
+
+type eval = mod_t -> expr -> value_t
+
+exception TypeError of value_t * value_t
+exception ArgError of value_t * value_t list
 
 (* let equal_gen_func _ formatter _ = Format.fprintf formatter "<Function>" *)
 let compare_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = 0

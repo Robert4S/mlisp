@@ -1,6 +1,6 @@
 open Common_types
 
-type 'a t [@@deriving show]
+type 'a t = 'a env_t [@@deriving show]
 
 val of_tbl_list : 'a gen_hashtable -> 'a t
 val to_tbl_list : 'a t -> 'a gen_hashtable
@@ -13,3 +13,4 @@ val push_frame : 'a t -> 'a t -> 'a t
 val pairs : 'a t -> (string * 'a) list
 val mass_add : 'a t -> (string * 'a) list -> unit
 val equal : ('a -> 'a -> bool )-> 'a t -> 'a t -> bool
+val populate : unit -> value_t t

@@ -3,11 +3,6 @@ open Core
 
 module Builtins (Mod : sig
   type t [@@deriving eq, ord]
-end) (MlispMap : sig
-  type 'a t [@@deriving eq, ord]
-
-  val get : 'a t -> string -> 'a option
-  val pairs : 'a t -> (string * 'a) list
 end) (Value : sig
   type userdef_t
   type trait_t
@@ -16,12 +11,13 @@ end) (Value : sig
     | Int of int
     | Float of float
     | Atom of string
-    | Function of [ `Userdefined of func * t gen_hashtable | `Internal of t gen_func ]
+    | Function of
+        [ `Userdefined of func * t gen_hashtable | `Internal of t gen_func ]
     | String of string
     | List of t list
     | Thunk of t delayed
-    | ConsCell of t cons_cell
-    | Map of t MlispMap.t
+    | ConsCell of t * t
+    | Map of t MMap.t
     | Ref of t ref
     | Set of t list
     | Module of Mod.t
@@ -243,7 +239,8 @@ end = struct
     match res with
     | Some (_, Thunk v) -> v ()
     | None ->
-        raise (MatchError "No cond clause matched. Perhaps a missing else clause?")
+        raise
+          (MatchError "No cond clause matched. Perhaps a missing else clause?")
     | _ -> failwith "cond body should be a thunk"
 
   and nil (vals : Value.t list) : Value.t =
@@ -292,27 +289,25 @@ end = struct
 
   and keys : Value.t list -> Value.t = function
     | [ Value.Map m ] ->
-        Value.List (List.map ~f:(fun (k, _) -> Value.Atom k) @@ MlispMap.pairs m)
+        Value.List (List.map ~f:(fun (k, _) -> Value.Atom k) @@ MMap.pairs m)
     | _ -> assert false
 
   and values : Value.t list -> Value.t = function
     | [ Value.Map m ] ->
-        Value.List (List.map ~f:(fun (_, v) -> v) @@ MlispMap.pairs m)
+        Value.List (List.map ~f:(fun (_, v) -> v) @@ MMap.pairs m)
     | _ -> assert false
 
   and pairs : Value.t list -> Value.t = function
     | [ Value.Map m ] ->
         Value.List
           (List.map ~f:(fun (k, v) -> Value.ConsCell (Value.Atom k, v))
-          @@ MlispMap.pairs m)
+          @@ MMap.pairs m)
     | _ -> assert false
 
   and get_map : Value.t list -> Value.t = function
     | [ x; Value.Map m ] -> (
-        let res = MlispMap.get m @@ Value.show x in
-        match res with
-        | Some v -> v
-        | None -> Value.Atom "nil")
+        let res = MMap.get m @@ Value.show x in
+        match res with Some v -> v | None -> Value.Atom "nil")
     | _ -> assert false
 
   and ref_ : Value.t list -> Value.t = function
@@ -343,7 +338,8 @@ end = struct
         hd_ @@ [ eval_function func env ]
     | _ ->
         raise
-          (InvalidArg "cannot take the head of something that is not a collection")
+          (InvalidArg
+             "cannot take the head of something that is not a collection")
 
   and tail vals =
     match vals with

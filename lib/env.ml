@@ -18,7 +18,9 @@ and update e k ~f =
   Hashtbl.update head k ~f
 
 and push e =
-  let symbol_table = Hashtbl.create ~growth_allowed:true ~size:20 (module String) in
+  let symbol_table =
+    Hashtbl.create ~growth_allowed:true ~size:20 (module String)
+  in
   symbol_table :: e
 
 and show pp_val (e : 'a t) =
@@ -41,14 +43,10 @@ and find e name =
   | [] -> None
   | x :: xs -> (
       let found = Hashtbl.find x name in
-      match found with
-      | Some item -> Some item
-      | None -> find xs name)
+      match found with Some item -> Some item | None -> find xs name)
 
 and find_exn e name =
-  match find e name with
-  | None -> raise (Unbound name)
-  | Some v -> v
+  match find e name with None -> raise (Unbound name) | Some v -> v
 
 and mass_add env lst =
   let head = List.hd_exn env in
@@ -68,3 +66,15 @@ and make pairs =
   in
   mass_add tbl pairs;
   tbl
+
+let populate () =
+  let items = (*Builtins.items*) todo () in
+  let tbl =
+    [
+      Hashtbl.create ~growth_allowed:true
+        ~size:(int_of_float (float_of_int (List.length items) *. 1.5))
+        (module String);
+    ]
+  in
+  mass_add tbl items;
+  of_tbl_list tbl

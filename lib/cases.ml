@@ -1,18 +1,17 @@
 open! Core
-open Environment
 
-let env = Eval.remake @@ Eval.populate ()
+let env = Eval.remake @@ Env.populate ()
 
 let%expect_test "simple expression" =
-  let _ = Parse.evaluate_program env "5" in
+  let _ = Parse.evaluate_program Eval.eval env "5" in
   [%expect {| 5 |}]
 
 let%expect_test "basic arithemtic" =
-  let _ = Parse.evaluate_program env "(* 2 (+ 5 5))" in
+  let _ = Parse.evaluate_program Eval.eval env "(* 2 (+ 5 5))" in
   [%expect {| 20 |}]
 
 let%expect_test "printing from lisp" =
-  let _ = Parse.evaluate_program env "(io-puts 5)" in
+  let _ = Parse.evaluate_program Eval.eval env "(io-puts 5)" in
   [%expect {|
     5
     nil
@@ -20,7 +19,7 @@ let%expect_test "printing from lisp" =
 
 let%expect_test "functions" =
   let _ =
-    Parse.evaluate_program env
+    Parse.evaluate_program Eval.eval env
       "(defun make-string (a b c) (str a b c)) (make-string \"Hello\" \" \" 5)"
   in
   [%expect {| ""Hello"" "5" |}]
@@ -35,7 +34,7 @@ let%expect_test "recursion" =
     \    (fact 5)\n\
     \    "
   in
-  let _ = Parse.evaluate_program env program in
+  let _ = Parse.evaluate_program Eval.eval env program in
   [%expect {| 120 |}]
 
 let%expect_test "variable captures" =
@@ -60,15 +59,15 @@ let%expect_test "variable captures" =
     |}]
 
 let%expect_test "clojure-like maps" =
-  let env = Eval.remake @@ Eval.populate () in
+  let env = Eval.remake @@ Env.populate () in
   let program = "(def my-map {:hello \"world\"}) (get :hello my-map)" in
-  let _ = Parse.evaluate_program env program in
+  let _ = Parse.evaluate_program Eval.eval env program in
   [%expect {|"world"|}]
 
 let%expect_test "object syntax" =
-  let env = Eval.remake @@ Eval.populate () in
+  let env = Eval.remake @@ Env.populate () in
   let program = "(def my-map {:hello \"world\"}) (:hello my-map)" in
-  let _ = Parse.evaluate_program env program in
+  let _ = Parse.evaluate_program Eval.eval env program in
   [%expect {| "world" |}]
 
 let%expect_test "import syntax" =
@@ -98,5 +97,5 @@ let%expect_test "trait impl" =
     \   (defun ooga (z) 10)))\n\
     \  "
   in
-  let _ = Parse.evaluate_program env program in
+  let _ = Parse.evaluate_program Eval.eval env program in
   [%expect {| nil |}]
