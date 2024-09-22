@@ -1,6 +1,5 @@
 open Core
 open Common_types
-open Ast
 
 type f = trait_f [@@deriving show, eq, ord]
 type t = trait_t
@@ -8,9 +7,7 @@ type t = trait_t
 let equal _ _ = false
 and compare _ _ = Int.max_value
 and make_f name args = { name; args }
-
-and has_implementer { impls; _ } name =
-  Hashtbl.find impls name |> Option.is_some
+and has_implementer { impls; _ } name = Hashtbl.find impls name |> Option.is_some
 
 and impls { impls; _ } =
   let keys = Hashtbl.keys impls in
@@ -25,14 +22,6 @@ and make_trait name functions =
   }
 
 let add_implementer x name i = Hashtbl.update x.impls name ~f:(fun _ -> i)
-
-module type EVAL = sig
-  val eval : mod_t -> expr -> value_t
-  val handle_userdef_call : mod_t -> func -> value_t gen_func
-  val bound_frame : string list -> expr -> value_t Env.t -> value_t Env.t
-  val remake : ?name:string option -> value_t Env.t -> mod_t
-  val funcall : value_t gen_func -> value_t list -> value_t
-end
 
 let to_mod (module Eval : EVAL) { functions; impls; name } =
   let get_impl (func : f) args =
@@ -57,15 +46,12 @@ let to_mod (module Eval : EVAL) { functions; impls; name } =
                   (Types.parent value_type) ())
         | _ -> failwithf "module %s found" (Types.parent value_type) ())
     | _ ->
-        failwith
-          "first argument of trait function must be a module associated type"
+        failwith "first argument of trait function must be a module associated type"
   in
   let new_functions =
-    functions
-    |> List.map ~f:(fun { name; args } -> (name, get_impl { name; args }))
+    functions |> List.map ~f:(fun { name; args } -> (name, get_impl { name; args }))
   in
-  let new_mod = Mod.make_new (Some name) in
+  let new_mod = Mod.make_new (module Eval) (Some name) in
   List.iter new_functions ~f:(fun (name, fn) ->
-      Env.update (Mod.get_env new_mod) name ~f:(fun _ ->
-          Function (`Internal fn)));
+      Env.update (Mod.get_env new_mod) name ~f:(fun _ -> Function (`Internal fn)));
   new_mod

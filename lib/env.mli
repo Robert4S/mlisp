@@ -13,4 +13,3 @@ val push_frame : 'a t -> 'a t -> 'a t
 val pairs : 'a t -> (string * 'a) list
 val mass_add : 'a t -> (string * 'a) list -> unit
 val equal : ('a -> 'a -> bool )-> 'a t -> 'a t -> bool
-val populate : unit -> value_t t

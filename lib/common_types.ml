@@ -14,14 +14,9 @@ let compare_gen_func _ _ _ = Int.max_value
 let equal_gen_hashtable _ _ _ = false
 let compare_gen_hashtable _ _ _ = Int.max_value
 let pp_gen_hashtable _ formatter _ = Format.fprintf formatter "<Environment>"
-
-(* let equal_trait_t _ _ = false *)
 let pp_env_t _ ppf _ = Format.fprintf ppf "<Env>"
 let pp_delayed _ ppf _ = Format.fprintf ppf "<Thunk>"
 let pp_gen_func _ ppf _ = Format.fprintf ppf "<Thunk>"
-let pp_string_map _ _ _ = failwith "todo"
-let equal_string_map _ _ _ = failwith "todo"
-let compare_string_map _ _ _ = failwith "todo"
 
 let pp_mlispmap_t pp_value formatter map =
   let pp_pair formatter (key, value) =
@@ -53,14 +48,9 @@ type type_t = { parent : string; field_names : string list }
 type trait_f = { name : string; args : int } [@@deriving show, eq, ord]
 
 type 'a mlispmap_t = 'a String.Map.t
-[@@deriving.show printer (fun _ ppf _ -> Format.fprintf ppf "<Map>")]
-[@@deriving eq, ord]
+[@@deriving.show printer pp_mlispmap_t] [@@deriving eq, ord]
 
-type mod_t = {
-  env : value_t env_t;
-  name : string option;
-  mutable t : type_t option;
-}
+type mod_t = { env : value_t env_t; name : string option; mutable t : type_t option }
 [@@deriving.eq equal (fun _ _ -> false)]
 [@@deriving.ord compare (fun _ _ -> Int.max_value)]
 
@@ -79,8 +69,7 @@ and value_t =
   | Float of float
   | Atom of string
   | Function of
-      [ `Userdefined of func * value_t gen_hashtable
-      | `Internal of value_t gen_func ]
+      [ `Userdefined of func * value_t gen_hashtable | `Internal of value_t gen_func ]
   | String of string
   | List of value_t list
   | Thunk of value_t delayed
@@ -101,6 +90,7 @@ exception TypeError of value_t * value_t
 exception ArgError of value_t * value_t list
 
 (* let equal_gen_func _ formatter _ = Format.fprintf formatter "<Function>" *)
+(*
 let compare_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = 0
 and equal_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = false
 and pp_gen_func _c f (_gf : 'a gen_func) = Format.fprintf f "function"
@@ -110,3 +100,14 @@ and pp_delayed _c f _gf = Format.fprintf f "function"
 and compare_gen_hashtable _c _a _b = 0
 and equal_gen_hashtable _c _a _b = false
 and pp_gen_hashtable _c f _gf = Format.fprintf f "TABLE"
+*)
+
+module type EVAL = sig
+  open Ast
+
+  val eval : mod_t -> expr -> value_t
+  val handle_userdef_call : mod_t -> func -> value_t gen_func
+  val bound_frame : string list -> expr -> value_t env_t -> value_t env_t
+  val remake : ?name:string option -> value_t env_t -> mod_t
+  val funcall : value_t gen_func -> value_t list -> value_t
+end

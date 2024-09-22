@@ -1,6 +1,6 @@
 open! Core
 
-let env = Eval.remake @@ Env.populate ()
+let env = Eval.remake @@ Prelude.populate (module Eval) ()
 
 let%expect_test "simple expression" =
   let _ = Parse.evaluate_program Eval.eval env "5" in
@@ -59,13 +59,13 @@ let%expect_test "variable captures" =
     |}]
 
 let%expect_test "clojure-like maps" =
-  let env = Eval.remake @@ Env.populate () in
+  let env = Eval.remake @@ Prelude.populate (module Eval) () in
   let program = "(def my-map {:hello \"world\"}) (get :hello my-map)" in
   let _ = Parse.evaluate_program Eval.eval env program in
   [%expect {|"world"|}]
 
 let%expect_test "object syntax" =
-  let env = Eval.remake @@ Env.populate () in
+  let env = Eval.remake @@ Prelude.populate (module Eval) () in
   let program = "(def my-map {:hello \"world\"}) (:hello my-map)" in
   let _ = Parse.evaluate_program Eval.eval env program in
   [%expect {| "world" |}]

@@ -25,11 +25,12 @@ let repl name env () =
         Out_channel.(flush stdout);
         aux prompt "")
       else aux prompt newbuf
-    with e ->
-      print_endline "Error: ";
-      print_endline @@ Exn.to_string e;
-      Out_channel.(flush stdout);
-      aux prompt buf
+    with
+    | e ->
+        print_endline "Error: ";
+        print_endline @@ Exn.to_string e;
+        Out_channel.(flush stdout);
+        aux prompt buf
   in
   LNoise.catch_break false;
   LNoise.history_load ~filename:"history.txt" |> ignore;
@@ -43,12 +44,12 @@ let () =
   if Array.length args = 3 then (
     if String.(args.(1) = "-r") then (
       let filename = args.(2) in
-      let env = Mod.with_file Eval.eval filename in
+      let env = Mod.with_file (module Eval) filename in
       let name = String.drop_suffix filename 6 in
       Out_channel.(flush stdout);
       repl name env ())
     else if String.(args.(1) = "-c") then
       let filename = args.(2) in
-      let _ = Mod.with_file Eval.eval filename in
+      let _ = Mod.with_file (module Eval) filename in
       ())
-  else repl "" (Mod.remake (Env.populate ()) (Some "repl")) ()
+  else repl "" (Mod.remake (Prelude.populate (module Eval) ()) (Some "repl")) ()

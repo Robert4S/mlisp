@@ -33,7 +33,10 @@ and bound_vars args body =
 and bound_frame args body env =
   let bound = bound_vars args body in
   let bound =
-    List.(bound >>| function Atom name -> name | _ -> failwith "nuh uh bucko")
+    List.(
+      bound >>| function
+      | Atom name -> name
+      | _ -> failwith "nuh uh bucko")
   in
   let vals =
     List.filter_map bound ~f:(fun var ->
@@ -60,7 +63,9 @@ and handle_userdef_call (mod_ : mod_t) (f : func) (args : value_t list) =
   eval (Mod.remake env (Mod.name mod_)) f.body
 
 and all predicate xs =
-  match xs with [] -> true | x :: xs -> predicate x && all predicate xs
+  match xs with
+  | [] -> true
+  | x :: xs -> predicate x && all predicate xs
 
 and eval_all xs =
   let rec aux xs acc =
@@ -72,18 +77,22 @@ and eval_all xs =
   aux xs []
 
 and funcall func args =
-  if all (function Thunk _ -> true | _ -> false) args then
-    Thunk (fun () -> func @@ eval_all args)
+  if
+    all
+      (function
+        | Thunk _ -> true
+        | _ -> false)
+      args
+  then Thunk (fun () -> func @@ eval_all args)
   else func @@ eval_all args
 
 and handle_call (env : mod_t) func name args =
   match func with
   | Function (`Internal f) -> (
       match name with
-      | "if" | "cond" ->
-          let args =
-            List.map args ~f:(fun arg -> Thunk (fun () -> eval env arg))
-          in
+      | "if"
+      | "cond" ->
+          let args = List.map args ~f:(fun arg -> Thunk (fun () -> eval env arg)) in
           f args
       | _ ->
           let args = List.map args ~f:(eval env) in
@@ -108,10 +117,15 @@ and only_atoms exprs =
 
 and handle_map_access (env : mod_t) m field : value_t =
   match eval env m with
-  | MMap m -> ( match MMap.get m field with Some v -> v | None -> Atom "nil")
+  | MMap m -> (
+      match MMap.get m field with
+      | Some v -> v
+      | None -> Atom "nil")
   | UserDefined u -> (
       let m = Types.inner u in
-      match MMap.get m field with Some v -> v | None -> Atom "nil")
+      match MMap.get m field with
+      | Some v -> v
+      | None -> Atom "nil")
   | _ -> raise @@ SyntaxError "temporary problem"
 
 and define_map (env : mod_t) args : (value_t, string) Result.t =
@@ -149,7 +163,9 @@ and eval_type_create mod_ name exprs =
         | _ -> Error "value after name should be brackets")
     | _ -> Error "no module of that name"
   in
-  match res with Ok v -> UserDefined v | Error e -> failwith e
+  match res with
+  | Ok v -> UserDefined v
+  | Error e -> failwith e
 
 and eval_deftrait mod_ name es =
   match extract_functions es with
@@ -163,13 +179,19 @@ and eval_defimpl mod_ trait_name mod_name body : value_t =
   let m_env = Mod.get_env mod_ in
   match Env.find m_env trait_name with
   | Some (Trait t) ->
-      let m = Mod.create ~parent:(Some mod_) eval body in
+      let m = Mod.create ~parent:(Some mod_) (self ()) body in
       Trait.add_implementer t mod_name m;
       Atom "nil"
   | _ -> todo ()
 
 and eval_defun mod_ name args body : value_t =
-  let args = List.map ~f:(function Atom n -> n | _ -> assert false) args in
+  let args =
+    List.map
+      ~f:(function
+        | Atom n -> n
+        | _ -> assert false)
+      args
+  in
   let func = handle_defun args body mod_ in
   Mod.update mod_ name ~f:(fun _ -> func);
   (match func with
@@ -180,11 +202,17 @@ and eval_defun mod_ name args body : value_t =
 
 and eval_deftype mod_ fields : value_t =
   let fields =
-    List.map ~f:(function Atom a -> a | _ -> assert false) fields
+    List.map
+      ~f:(function
+        | Atom a -> a
+        | _ -> assert false)
+      fields
   in
   let new_type =
     Types.create
-      (Mod.name mod_ |> function Some x -> x | _ -> assert false)
+      (Mod.name mod_ |> function
+       | Some x -> x
+       | _ -> assert false)
       fields
   in
   Mod.add_type mod_ new_type;
@@ -196,13 +224,13 @@ and eval_def mod_ name value : value_t =
   Atom "nil"
 
 and eval_defmod mod_ name e =
-  let new_module = Mod.create ~parent:(Some mod_) ~name:(Some name) eval e in
+  let new_module = Mod.create ~parent:(Some mod_) ~name:(Some name) (self ()) e in
   Mod.update mod_ ~f:(fun _ -> Module new_module) name;
   Mod.update new_module ~f:(fun _ -> Module new_module) name;
   Module new_module
 
 and eval_mod mod_ e =
-  let new_mod = Mod.create ~parent:(Some mod_) eval e in
+  let new_mod = Mod.create ~parent:(Some mod_) (self ()) e in
   Module new_mod
 
 and eval_atom_literal mod_ v : value_t =
@@ -216,25 +244,20 @@ and eval_mod_access mod_ module_name field : value_t =
       | Some v -> v
       | None -> Atom "nil")
   | Trait t -> (
-      let module Self : sig
-        val eval : mod_t -> expr -> value_t
-        val handle_userdef_call : mod_t -> func -> value_t gen_func
-        val bound_frame : string list -> expr -> value_t Env.t -> value_t Env.t
-        val remake : ?name:string option -> value_t Env.t -> mod_t
-        val funcall : value_t gen_func -> value_t list -> value_t
-      end = struct
-        let eval = eval
-        let handle_userdef_call = handle_userdef_call
-        let bound_frame = bound_frame
-        let remake = remake
-        let funcall = funcall
-      end in
-      let to_mod = Trait.to_mod (module Self) t in
-      match Mod.find to_mod field with Some v -> v | None -> Atom "nil")
+      let to_mod = Trait.to_mod (self ()) t in
+      match Mod.find to_mod field with
+      | Some v -> v
+      | None -> Atom "nil")
   | _ -> failwith "not a module"
 
 and eval_fun mod_ args body =
-  let args = List.map ~f:(function Atom x -> x | _ -> assert false) args in
+  let args =
+    List.map
+      ~f:(function
+        | Atom x -> x
+        | _ -> assert false)
+      args
+  in
   handle_defun args body mod_
 
 and eval_map mod_ pairs =
@@ -243,7 +266,7 @@ and eval_map mod_ pairs =
   | Error key -> raise @@ KeyError key
 
 and eval_import mod_ imported =
-  let new_module = Module (Mod.with_file eval imported) in
+  let new_module = Module (Mod.with_file (self ()) imported) in
   Env.update (Mod.get_env mod_) imported ~f:(fun _ -> new_module);
   new_module
 
@@ -261,9 +284,7 @@ and eval_do mod_ exprs =
 and eval_let mod_ assignls body =
   if not (List.length assignls mod 2 = 0) then
     raise (SyntaxError "a let assign list must be of even length");
-  let names =
-    only_atoms @@ List.filteri assignls ~f:(fun idx _ -> idx mod 2 = 0)
-  in
+  let names = only_atoms @@ List.filteri assignls ~f:(fun idx _ -> idx mod 2 = 0) in
   let values =
     List.map ~f:(eval mod_)
     @@ List.filteri assignls ~f:(fun idx _ -> not (idx mod 2 = 0))
@@ -319,3 +340,13 @@ and eval : mod_t -> expr -> value_t =
   | Set ys -> Set (List.map ~f:(eval mod_) ys)
 
 and unreachable () = Function (`Internal (fun _ -> failwith "unreachable"))
+
+and self () =
+  let module Self : EVAL = struct
+    let eval = eval
+    let handle_userdef_call = handle_userdef_call
+    let bound_frame = bound_frame
+    let remake = remake
+    let funcall = funcall
+  end in
+  (module Self : EVAL)
