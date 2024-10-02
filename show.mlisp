@@ -1,3 +1,5 @@
+(defmod H ((def x :hello)))
+(defmod H ((deftype {:w})))
 (deftrait Show (
   (defun show (x))
 ))

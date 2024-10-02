@@ -2,23 +2,28 @@ open Core
 open Ast
 open Common_types
 
-type t = mod_t [@@deriving show]
+type t = mod_t [@@deriving show, eq, ord]
 
-let rec remake ?(t = None) (env : value_t env_t) name = { env; name; t }
-and add_type x t = x.t <- Some t
+let rec add_type x t = x.t <- Some t
 and update { env; _ } key ~f = Env.update (Env.of_tbl_list env) key ~f
 and find { env; _ } key = Env.find env key
 
-and make_new (module Eval : EVAL) name =
+and make_new ?(imports = []) (module Eval : EVAL) name =
   let env = Prelude.populate (module Eval) () in
-  remake env name
+  { env; name; imports; t = None; opens = [] }
 
 and with_file (module Eval : EVAL) name =
   let contents = In_channel.read_all (name ^ ".mlisp") in
   let expr = Parse.parse contents in
-  create ~name:(Some name) (module Eval : EVAL) expr
+  create ~name:(Some (name |> String.capitalize)) (module Eval : EVAL) expr
 
-and create ?(name = None) ?(parent = None) (module Eval : EVAL) expr =
+and create
+    ?(name = None)
+    ?(parent = None)
+    ?(imports = [])
+    ?(opens = [])
+    (module Eval : EVAL)
+    expr =
   let mod_ =
     {
       env =
@@ -27,6 +32,8 @@ and create ?(name = None) ?(parent = None) (module Eval : EVAL) expr =
         | Some e -> get_env e);
       name;
       t = None;
+      imports;
+      opens;
     }
   in
   (match name with
@@ -39,7 +46,10 @@ and create ?(name = None) ?(parent = None) (module Eval : EVAL) expr =
   | _ -> mod_
 
 and get_env { env; _ } = env
-and equal _ _ = false
-and compare _ _ = Int.max_value
-and name { name; env = _; t = _ } = name
+and name (x : t) = x.name
 and get_t { t; _ } = t
+and imports { imports; _ } = imports
+
+let add_import ~target ~source = target.imports <- source :: target.imports
+let add_open ~into ~expand = into.opens <- expand :: into.opens
+let opens { opens; _ } = opens

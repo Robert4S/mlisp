@@ -11,8 +11,8 @@ type expr =
   | String of string
   | Quoted of expr
   | Set of expr list
-  | ModAccess of expr * string
-  | TypeCreate of string * expr list
+  | ModAccess of expr * expr
+  | TypeCreate of expr * expr list
 [@@deriving show { with_path = false }, eq, ord, sexp]
 
 module ExprComparable : Set_intf.Elt with type t = expr = struct

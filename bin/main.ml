@@ -1,7 +1,17 @@
 open Mlisp
 open Core
+open Common_types
 open! Cases
 module F = Fmt
+
+let mode_param =
+  let open Command.Param in
+  flag "-m" (optional string) ~doc:"mode for the repl, can be either repl or compile"
+
+let files_param =
+  let open Command.Param in
+  flag "-f" (listed string)
+    ~doc:"files to include in running, like the files passed to ocamlc or ocamlopt"
 
 let count_char s c =
   let count acc c2 = if Char.(c2 = c) then acc + 1 else acc in
@@ -20,8 +30,21 @@ let repl name env () =
     let closes = count_char newbuf ')' in
     try
       if closes >= opens then (
+        let open Effect.Deep in
         print_string "=> ";
-        Parse.evaluate_program Eval.eval env newbuf;
+        match_with
+          (fun () -> Parse.evaluate_program Eval.eval env newbuf)
+          ()
+          {
+            retc = (fun v -> v);
+            exnc = raise;
+            effc =
+              (fun (type a) (e : a Effect.t) ->
+                match e with
+                | NameError (_, _, message) ->
+                    failwithf "Name error propagated: %s" message ()
+                | _ -> None);
+          };
         Out_channel.(flush stdout);
         aux prompt "")
       else aux prompt newbuf
@@ -39,17 +62,23 @@ let repl name env () =
   let _ = aux prompt "" in
   ()
 
-let () =
-  let args = Sys.get_argv () in
-  if Array.length args = 3 then (
-    if String.(args.(1) = "-r") then (
-      let filename = args.(2) in
-      let env = Mod.with_file (module Eval) filename in
-      let name = String.drop_suffix filename 6 in
+let main files mode =
+  List.iter files ~f:(fun fname ->
+      Eval.push_mod (String.capitalize fname)
+        (`Mod (Mod.with_file (module Eval) fname)));
+
+  match mode with
+  | `Repl ->
       Out_channel.(flush stdout);
-      repl name env ())
-    else if String.(args.(1) = "-c") then
-      let filename = args.(2) in
-      let _ = Mod.with_file (module Eval) filename in
-      ())
-  else repl "" (Mod.remake (Prelude.populate (module Eval) ()) (Some "repl")) ()
+      repl "" (Mod.make_new (module Eval) (Some "Repl")) ()
+  | `Run -> ()
+
+let command =
+  Command.basic ~summary:"Run the mlisp interpreter"
+    (let%map_open.Command mode = mode_param and file_names = files_param in
+     fun () ->
+       match mode with
+       | Some "repl" -> main file_names `Repl
+       | _ -> main file_names `Run)
+
+let _ = Command_unix.run command

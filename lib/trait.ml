@@ -4,6 +4,8 @@ open Common_types
 type f = trait_f [@@deriving show, eq, ord]
 type t = trait_t
 
+let name { name; _ } = name
+
 let equal _ _ = false
 and compare _ _ = Int.max_value
 and make_f name args = { name; args }
@@ -25,21 +27,15 @@ let add_implementer x name i = Hashtbl.update x.impls name ~f:(fun _ -> i)
 
 let to_mod (module Eval : EVAL) { functions; impls; name } =
   let get_impl (func : f) args =
-    Hashtbl.keys impls |> List.iter ~f:print_endline;
     match args with
     | [] -> assert false
-    | UserDefined t :: _ -> (
+    | UserDefined (({ parent = _; field_names = _ }, _) as t) :: _ -> (
         let value_type = Types.get_type t in
         match Hashtbl.find impls (Types.parent value_type) with
         | Some m -> (
-            match Env.find (Mod.get_env m) func.name with
+            match Mod.find m func.name with
             | Some (Function (`Userdefined (func, env))) ->
-                let f =
-                  Eval.handle_userdef_call
-                    (Mod.remake (Env.of_tbl_list env) None)
-                    func
-                  |> Eval.funcall
-                in
+                let f = Eval.handle_userdef_call env func |> Eval.funcall in
                 f args
             | _ ->
                 failwithf "trait %s is not implemented for %s" name

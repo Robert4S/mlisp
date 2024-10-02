@@ -1,19 +1,18 @@
-(defun map (ls f)
-  (if (nil? ls) nil
-    (cons (f (hd ls))
-          (map (tail ls) f))))
+(deftype {:car :cdr})
+(defun head (xs) (:car xs))
+(defun tail (xs) (:cdr xs))
+(defun map (xs f) (do
+   (cond 
+     (nil? xs) nil
+     else #__MODULE__{:car (f (head xs)) :cdr (map (tail xs) f)})))
 
-(defun filter (ls pred)
-  (cond
-    (nil? ls) nil
-    (pred (hd ls))
-      (cons (hd ls) (filter (tail ls) pred))
-    true (filter (tail ls) pred)))
-
-(defun rev-inner (ls acc) 
-  (cond
-    (nil? ls) acc
-    true (rev-inner (tail ls) (cons (hd ls) acc))))
-
-(defun rev (ls) (rev-inner ls nil))
-
+(defimpl Show.Show __MODULE__
+  (
+   (defun show (lst) (do
+       (defun show-inner (lst) 
+         (cond
+          (nil? lst) "]"
+          (nil? (:cdr lst)) (str (:car lst) "]")
+          else (str (:car lst) ", " (show-inner (:cdr lst)))))
+        (str "[" (show-inner lst))))
+   ))

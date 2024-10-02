@@ -1,7 +1,12 @@
 open Core
 open Common_types
 
-type t = value_t [@@deriving eq, ord]
+type t = value_t [@@deriving ord]
+
+let equal v1 v2 =
+  match (v1, v2) with
+  | Atom a, Atom b -> phys_equal a b
+  | other1, other2 -> equal_value_t other1 other2
 
 let rec pp (formatter : Format.formatter) value =
   match value with
@@ -21,17 +26,19 @@ let rec pp (formatter : Format.formatter) value =
       (match xs with
       | first :: rest ->
           Format.fprintf formatter "%a" pp first;
-          List.iter rest ~f:(fun value ->
-              Format.fprintf formatter " %a" pp value)
+          List.iter rest ~f:(fun value -> Format.fprintf formatter " %a" pp value)
       | _ -> ());
       Format.fprintf formatter "}"
+  | Module { name = Some name; t = Some t; _ } ->
+      Format.fprintf formatter "<Module %s with type {%s}>" name (show_type_t t)
+  | Module { name = Some name; _ } -> Format.fprintf formatter "<Module %s>" name
   | Module _ -> Format.fprintf formatter "<Module>"
   | UserDefined u ->
       let name = Types.parent @@ Types.get_type u in
       let inner = Types.inner u in
       Format.fprintf formatter "#%s" name;
       MMap.pp pp formatter inner
-  | Trait _ -> Format.fprintf formatter "<Trait>"
+  | Trait { name; _ } -> Format.fprintf formatter "<Trait %s>" name
 
 and typeof (vals : t list) : t =
   let rec aux vals acc : string =
@@ -52,7 +59,9 @@ and typeof (vals : t list) : t =
           | MMap _ -> "Map "
           | Ref r ->
               "Ref "
-              ^ (function String s -> s | _ -> assert false)
+              ^ (function
+                  | String s -> s
+                  | _ -> assert false)
               @@ typeof [ !r ]
           | Set _ -> "Set "
           | Module _ -> "Module "

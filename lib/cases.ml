@@ -1,6 +1,6 @@
 open! Core
 
-let env = Eval.remake @@ Prelude.populate (module Eval) ()
+let env = Mod.make_new (module Eval) None
 
 let%expect_test "simple expression" =
   let _ = Parse.evaluate_program Eval.eval env "5" in
@@ -59,13 +59,13 @@ let%expect_test "variable captures" =
     |}]
 
 let%expect_test "clojure-like maps" =
-  let env = Eval.remake @@ Prelude.populate (module Eval) () in
+  let env = Mod.make_new (module Eval) None in
   let program = "(def my-map {:hello \"world\"}) (get :hello my-map)" in
   let _ = Parse.evaluate_program Eval.eval env program in
   [%expect {|"world"|}]
 
 let%expect_test "object syntax" =
-  let env = Eval.remake @@ Prelude.populate (module Eval) () in
+  let env = Mod.make_new (module Eval) None in
   let program = "(def my-map {:hello \"world\"}) (:hello my-map)" in
   let _ = Parse.evaluate_program Eval.eval env program in
   [%expect {| "world" |}]
@@ -79,23 +79,26 @@ let%expect_test "module access" =
   let program = "(hello.world '())" in
   Fmt.pr "%s" (Ast.show_expr @@ Parse.parse program);
   [%expect
-    {| (List [(List [(ModAccess ((Atom "hello"), "world")); (Quoted (List []))])]) |}]
+    {|
+    (List
+       [(List [(ModAccess ((Atom "hello"), (Atom "world"))); (Quoted (List []))])
+         ])
+    |}]
 
 let%expect_test "userdef type instantiation" =
   let program = "#Hello{:world 10}" in
   Fmt.pr "%s" (Ast.show_expr @@ Parse.parse program);
-  [%expect {| (List [(TypeCreate ("#Hello", [(Atom ":world"); (Int 10)]))]) |}]
+  [%expect {| (List [(TypeCreate ((Atom "Hello"), [(Atom ":world"); (Int 10)]))]) |}]
 
 let%expect_test "trait impl" =
   let program =
-    "\n\
-    \   (defmod h (\n\
-    \    (deftype {:hello})))\n\
-    \   (deftrait x (\n\
-    \    (defun ooga (z))))\n\
-    \   (defimpl x h (\n\
-    \   (defun ooga (z) 10)))\n\
-    \  "
+    "(defimpl Show.Show List\n\
+    \  (\n\
+    \   (defun show (lst)\n\
+    \     (cond\n\
+    \        (nil? lst) \"]\"\n\
+    \        :else (str \"[\" (:car lst) (show (:cdr lst)))))\n\
+    \   ))"
   in
-  let _ = Parse.evaluate_program Eval.eval env program in
-  [%expect {| nil |}]
+  Fmt.pr "%s" (Ast.show_expr @@ Parse.parse program);
+  [%expect {||}]

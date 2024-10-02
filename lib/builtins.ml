@@ -1,11 +1,7 @@
 open Common_types
 open Core
 
-module Create (Eval : sig
-  val remake : ?name:string option -> value_t env_t -> mod_t
-  val handle_userdef_call : mod_t -> func -> value_t gen_func
-end) =
-struct
+module Create (Eval : EVAL) = struct
   let rec items _ =
     [
       ("true", Atom "true");
@@ -62,7 +58,7 @@ struct
     | Int a, Float b -> Float (float_of_int a -. b)
     | Float a, Int b -> Float (a -. float_of_int b)
     | _ ->
-        print_endline @@ Value.show a;
+        (*         print_endline @@ Value.show a; *)
         raise (TypeError (a, b))
 
   and bin_mul a b =
@@ -116,8 +112,9 @@ struct
 
   and str vals =
     String
-      (List.fold vals ~init:"" ~f:(fun acc value ->
-           String.append acc @@ Value.show value))
+      (List.fold vals ~init:"" ~f:(fun acc -> function
+         | String s -> String.append acc s
+         | value -> String.append acc @@ Value.show value))
 
   and io_puts value =
     print_endline @@ Value.show @@ List.hd_exn value;
@@ -300,9 +297,7 @@ struct
     | [ List [] ] -> Atom "nil"
     | [ ConsCell (car, _cdr) ] -> car
     | [ String s ] -> String (Char.to_string @@ String.get s 0)
-    | [ Function (`Userdefined (func, env)) ] ->
-        let env = Env.of_tbl_list env in
-        hd_ @@ [ eval_function func env ]
+    | [ Function (`Userdefined (func, env)) ] -> hd_ @@ [ eval_function func env ]
     | _ ->
         raise
           (InvalidArg "cannot take the head of something that is not a collection")
@@ -312,16 +307,14 @@ struct
     | [ List (_ :: xs) ] -> List xs
     | [ List [] ] -> Atom "nil"
     | [ ConsCell (_car, cdr) ] -> cdr
-    | [ Function (`Userdefined (func, env)) ] ->
-        tail @@ [ eval_function func (Env.of_tbl_list env) ]
+    | [ Function (`Userdefined (func, env)) ] -> tail @@ [ eval_function func env ]
     | _ -> raise (InvalidArg "tail can only take the tail of a single list")
 
   and quit _vals =
     print_endline "Goodbye!";
     exit 0
 
-  and eval_function func (env : Value.t Env.t) =
-    Eval.handle_userdef_call (Eval.remake env) func []
+  and eval_function func (env : mod_t) = Eval.handle_userdef_call env func []
 
   and get_comb = function
     | [ v; MMap m ] -> get_map [ v; MMap m ]

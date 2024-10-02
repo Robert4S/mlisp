@@ -9,4 +9,4 @@ val add_implementer : t -> string -> mod_t -> unit
 val to_mod : (module EVAL) -> t -> mod_t
 val has_implementer : t -> string -> bool
 val impls : t -> (string * mod_t) list
-
+val name : t -> string

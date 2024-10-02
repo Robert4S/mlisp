@@ -1,0 +1,10 @@
+(open Show)
+(deftype {:val :neighbors})
+
+(defimpl Show __MODULE__ 
+  (
+  (defun show (t) (do
+    (cond
+      (nil? t) ""
+      else (str (:val t) " : " (List.map (:neighbors t) Show.show)))))
+))

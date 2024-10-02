@@ -19,4 +19,7 @@ let construct { parent; field_names } map =
 
 let inner (_, contents) = contents
 let get_type (t, _) = t
-let get (_type, contents) field = MMap.get contents field
+
+let get (({ field_names; _ } as _type), contents) field =
+  if String.(List.mem field_names field ~equal) then MMap.get contents field
+  else None

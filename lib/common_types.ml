@@ -3,6 +3,18 @@ open Ast
 
 let todo _ = failwith "todo"
 
+module StringTable = Hashtbl.Make (String)
+
+let atom_table : string StringTable.t =
+  StringTable.create ~growth_allowed:true ~size:10 ()
+
+let intern_atom s =
+  match Hashtbl.find atom_table s with
+  | Some n -> n
+  | None ->
+      Hashtbl.set atom_table ~key:s ~data:s;
+      s
+
 exception InvalidArg of string
 exception MatchError of string
 exception Unbound of string
@@ -53,28 +65,27 @@ type 'a mlispmap_t = 'a String.Map.t
 type mod_t = {
   env : value_t env_t;
   name : string option;
+  mutable opens : mod_t list;
   mutable t : type_t option;
+  mutable imports : [ `Mod of mod_t | `Trait of trait_t ] list;
 }
-[@@deriving.eq equal (fun _ _ -> false)]
-[@@deriving.ord compare (fun _ _ -> Int.max_value)]
+[@@deriving eq, ord]
 
 and trait_t = {
   name : string;
   functions : trait_f list;
   impls : (string, mod_t) Hashtbl.t;
-      [@equal fun _ _ -> false]
-      [@compare fun _ _ -> Int.max_value]
+      [@equal fun _ _ -> true]
+      [@compare fun _ _ -> 0]
       [@printer fun ppf _ -> Format.fprintf ppf "<Trait Impls>"]
 }
-[@@deriving eq]
+[@@deriving eq, ord]
 
 and value_t =
   | Int of int
   | Float of float
   | Atom of string
-  | Function of
-      [ `Userdefined of func * value_t gen_hashtable
-      | `Internal of value_t gen_func ]
+  | Function of [ `Userdefined of func * mod_t | `Internal of value_t gen_func ]
   | String of string
   | List of value_t list
   | Thunk of value_t delayed
@@ -94,25 +105,13 @@ type eval = mod_t -> expr -> value_t
 exception TypeError of value_t * value_t
 exception ArgError of value_t * value_t list
 
-(* let equal_gen_func _ formatter _ = Format.fprintf formatter "<Function>" *)
-(*
-let compare_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = 0
-and equal_gen_func _c (_a : 'a gen_func) (_b : 'a gen_func) = false
-and pp_gen_func _c f (_gf : 'a gen_func) = Format.fprintf f "function"
-and compare_delayed _c _a _b = 0
-and equal_delayed _c _a_ _b = false
-and pp_delayed _c f _gf = Format.fprintf f "function"
-and compare_gen_hashtable _c _a _b = 0
-and equal_gen_hashtable _c _a _b = false
-and pp_gen_hashtable _c f _gf = Format.fprintf f "TABLE"
-*)
-
 module type EVAL = sig
   open Ast
 
   val eval : mod_t -> expr -> value_t
   val handle_userdef_call : mod_t -> func -> value_t gen_func
   val bound_frame : string list -> expr -> value_t env_t -> value_t env_t
-  val remake : ?name:string option -> value_t env_t -> mod_t
   val funcall : value_t gen_func -> value_t list -> value_t
 end
+
+type _ Effect.t += NameError : (mod_t * expr * string) -> value_t Effect.t

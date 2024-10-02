@@ -6,7 +6,6 @@ open Ast
 %token <string> ATOM
 %token <float> FLOAT
 %token <string> STRING
-%token <string> STRUCT
 
 %token LPAREN "("
 %token RPAREN ")"
@@ -26,13 +25,13 @@ prog:
 ;
 
 expr:
-  | module_name = expr; DOT; name = ATOM {ModAccess (module_name, name)}
+  | module_name = expr; DOT; name = expr {ModAccess (module_name, name)}
   | QUOTE; e = expr {Quoted e}
   | s = STRING {String s}
   | a = ATOM {Atom a}
   | i = INT {Int i}
   | f = FLOAT {Float f}
-  | name = STRUCT; LBRAC; es = list(expr); RBRAC {TypeCreate (name, es)}
+  | HASH; name = expr; LBRAC; es = list(expr); RBRAC {TypeCreate (name, es)}
   | HASH; LBRAC; es = list(expr); RBRAC {Set es}
   | LBRAC; es = list(expr); RBRAC {Map es}
   | LPAREN; es = list(expr); RPAREN {List es}
